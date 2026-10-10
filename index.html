@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Composite Parts Quote | Wyspa Build</title>
-<meta name="description" content="Instant budgetary quotes for composite flat panels, drone rotors and molded parts. Engineering-reviewed by Wyspa, built by partner shops.">
+<meta name="description" content="Instant budgetary quotes for composite flat panels, drone rotors, molded parts and assemblies. Engineering-reviewed by Wyspa, built by partner shops.">
 <meta property="og:title" content="Wyspa Build: Composite Parts, Quoted Instantly">
 <meta property="og:description" content="Price a composite part in seconds. Wyspa engineering approves it, a partner builder makes it.">
 <meta property="og:url" content="https://build.wyspa.tech/">
@@ -54,6 +54,7 @@ html,body{margin:0;background:#eef2f3}
 .wb fieldset[hidden]{display:none}
 .wb label{display:grid;gap:6px;font:500 12px/1.3 var(--m);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .wb label.full{grid-column:1/-1}
+.wb label[hidden]{display:none}
 .wb input,.wb select,.wb textarea{font:400 16px/1.4 var(--b);color:var(--ink);background:var(--sheet);border:1px solid var(--rule);padding:10px 12px;width:100%;border-radius:0;text-transform:none;letter-spacing:0}
 .wb input:focus,.wb select:focus,.wb textarea:focus{outline:2px solid var(--sea);outline-offset:-1px}
 .wb .chk{display:flex;gap:10px;align-items:center;text-transform:none;letter-spacing:0;font:400 15px var(--b);color:var(--ink)}
@@ -82,8 +83,8 @@ html,body{margin:0;background:#eef2f3}
 }
 @media (max-width:520px){
  .wb form fieldset,.wb .steps{grid-template-columns:minmax(0,1fr)}
- .wb .tabs{width:100%}
- .wb .tabs button{flex:1;padding:12px 8px}
+ .wb .tabs{width:100%;display:grid;grid-template-columns:1fr 1fr}
+ .wb .tabs button{padding:12px 8px;border-bottom:1px solid var(--rule)}
 }
 @media print{
  .wb .hero,.wb #how,.wb #engineering,.wb #builders,.wb .tabs,.wb .send,.wb .top{display:none}
@@ -99,7 +100,7 @@ html,body{margin:0;background:#eef2f3}
  <div>
   <div class="lb">Wyspa Technologies · Composite Parts</div>
   <h1>Composite parts, <em>priced</em> in seconds. Engineered before they're built.</h1>
-  <p class="lead">Flat panels, drone rotors and molded parts. Get a budget price now; Wyspa engineering checks the laminate and drawings, then a partner shop builds it.</p>
+  <p class="lead">Flat panels, drone rotors, molded parts and bonded assemblies. Get a budget price now; Wyspa engineering checks the laminate and drawings, then a partner shop builds it.</p>
   <div class="cta"><a class="btn pr" href="#quote">Get a quote</a><a class="btn" href="#builders">For builders</a></div>
  </div>
  <figure class="fig">
@@ -143,6 +144,7 @@ html,body{margin:0;background:#eef2f3}
   <button type="button" role="tab" aria-selected="true" data-k="panel">Flat panel</button>
   <button type="button" role="tab" aria-selected="false" data-k="rotor">Drone rotor</button>
   <button type="button" role="tab" aria-selected="false" data-k="molded">Molded part</button>
+  <button type="button" role="tab" aria-selected="false" data-k="assembly">Assembly</button>
  </div>
 
  <div class="qt">
@@ -180,6 +182,18 @@ html,body{margin:0;background:#eef2f3}
     <label class="full">Complexity<select name="mCx"></select></label>
     <label>Quantity<input type="number" name="qty" value="5" min="1" step="1"></label>
    </fieldset>
+   <fieldset data-k="assembly" hidden>
+    <label>Components (molded parts)<input type="number" name="aN" value="6" min="2" max="100" step="1"></label>
+    <label>Total laminate area (m²)<input type="number" name="aA" value="2" min="0.05" step="0.05"></label>
+    <label>Average plies<input type="number" name="aPly" value="6" min="1" max="40" step="1"></label>
+    <label>Material<select name="aMat"></select></label>
+    <label>Bonded joints<input type="number" name="aJ" value="10" min="0" step="1"></label>
+    <label>Inserts / fasteners<input type="number" name="aIns" value="20" min="0" step="1"></label>
+    <label class="full">Complexity<select name="aCx"></select></label>
+    <label>Tooling<select name="aTool"><option value="new">New molds and assembly jig</option><option value="have">Existing tooling</option></select></label>
+    <label>Quantity (assemblies)<input type="number" name="qty" value="2" min="1" step="1"></label>
+    <p class="note" style="grid-column:1/-1;margin:0">Total laminate area is the summed surface of all parts. Assemblies are a rough order of magnitude until engineering reviews your CAD.</p>
+   </fieldset>
   </form>
 
   <aside class="est" aria-live="polite">
@@ -194,7 +208,7 @@ html,body{margin:0;background:#eef2f3}
 
  <div class="send">
   <h3>Request a firm quote</h3>
-  <p class="note" style="margin-top:6px">This opens an email with your configuration filled in. Attach STEP, DXF, PDF or a sketch before sending.</p>
+  <p class="note" style="margin-top:6px" id="sendnote"></p>
   <form id="sf" onsubmit="return false">
    <fieldset>
     <label>Name<input name="name" autocomplete="name" required></label>
@@ -202,9 +216,11 @@ html,body{margin:0;background:#eef2f3}
     <label>Email<input name="email" type="email" autocomplete="email" required></label>
     <label>Need-by date<input name="need" type="date"></label>
     <label class="full">Application and loads<textarea name="notes" rows="3" placeholder="What does the part do, what loads or environment does it see, any tolerance or weight targets"></textarea></label>
+    <label class="full" id="up">Geometry files: STEP, IGES, STL, 3DM, DXF, PDF, images or zip (up to 10 files, 25 MB total)<input type="file" name="files" multiple accept=".step,.stp,.iges,.igs,.stl,.obj,.3dm,.dxf,.dwg,.pdf,.sldprt,.sldasm,.x_t,.x_b,.f3d,.png,.jpg,.jpeg,.zip"></label>
+    <label style="position:absolute;left:-9999px" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
    </fieldset>
   </form>
-  <div class="cta"><button class="btn pr" type="button" id="go">Email request</button><button class="btn" type="button" id="cp">Copy summary</button><button class="btn" type="button" onclick="print()">Print</button></div>
+  <div class="cta"><button class="btn pr" type="button" id="go">Send request</button><button class="btn" type="button" id="cp">Copy summary</button><button class="btn" type="button" onclick="print()">Print</button></div>
   <p class="note" id="msg"></p>
  </div>
 </section>
@@ -241,12 +257,15 @@ html,body{margin:0;background:#eef2f3}
 <script>
 (function(){
 const P = window.WYSPA_PRICING, $ = s => document.querySelector(s), qf = $('#qf');
+// Google Apps Script web app that saves uploads to Drive and emails Casey (upload-script/Code.gs). Empty = email-only fallback.
+const UPLOAD_URL = P.uploadUrl || '';
 const usd = n => '$' + Math.round(n).toLocaleString('en-US');
 const usd2 = n => '$' + n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const fill = (sel, obj) => { sel.innerHTML = Object.entries(obj).map(([k,v]) => `<option value="${k}">${v.label}</option>`).join(''); };
 const pick = keys => Object.fromEntries(keys.map(k => [k, P.plies[k]]));
 fill(qf.elements.pMat, pick(P.panel.materials)); fill(qf.elements.pFin, P.panel.finish);
 fill(qf.elements.rMat, pick(P.rotor.materials)); fill(qf.elements.mMat, pick(P.molded.materials)); fill(qf.elements.mCx, P.molded.complexity);
+fill(qf.elements.aMat, pick(P.assembly.materials)); fill(qf.elements.aCx, P.molded.complexity);
 
 let kind = 'panel';
 try { const k = localStorage.getItem('wb-kind'); if (k && P[k]) kind = k; } catch(e) {}
@@ -281,7 +300,7 @@ function calc(){
     if (geo === 'design') warn.push('Rotor design (aero, structure, balance) is quoted as engineering hours after review.');
     if (val('rPair') && q % 2) warn.push('Odd quantity with CW/CCW pairs. We will round to full pairs.');
     spec.push(`Rotor ${D} × ${val('rP')} in, ${B}-blade, ${m.label}, ${val('rPair') ? 'CW/CCW pairs' : 'single hand'}, geometry: ${fs('rotor').querySelector('[name=rGeo]').selectedOptions[0].text}`);
-  } else {
+  } else if (kind === 'molded') {
     const L = val('mL'), W = val('mW'), H = val('mH') || 0, n = val('mPly'), m = P.plies[val('mMat')], c = P.molded.complexity[val('mCx')], M = P.molded;
     const a = (L * W + 2 * H * (L + W)) / 1e6;
     mat = a * (n * m.perM2 + P.consumablesPerM2);
@@ -290,12 +309,21 @@ function calc(){
     lead = nre ? P.leadDays.moldedNewMold : P.leadDays.molded;
     if (q < 3 && nre) warn.push('With one or two parts, tooling is most of the cost. Ask about a printed or machined one-off mold.');
     spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${a.toFixed(2)} m² surface), ${n} plies, ${m.label}, ${c.label}, ${nre ? 'new mold' : 'customer/existing mold'}`);
+  } else {
+    const N = Math.round(val('aN')), A = val('aA'), n = val('aPly'), m = P.plies[val('aMat')], c = P.molded.complexity[val('aCx')], M = P.molded, S = P.assembly;
+    const J = val('aJ') || 0, I = val('aIns') || 0;
+    mat = A * (n * m.perM2 + P.consumablesPerM2) + J * S.adhesivePerJoint + I * S.insertMat;
+    hr = N * (M.hrPerPart + M.trimHours) + A * (M.hrPerM2 + n * M.hrPerM2Ply) * c.labor + J * S.hrPerJoint + I * S.hrPerInsert + S.hrQA;
+    if (val('aTool') === 'new') nre = price(Math.max(M.tool.hrMin * N, A * M.tool.hrPerM2) * c.tool + S.jig.hrBase + N * S.jig.hrPerPart, A * M.tool.matPerM2 * c.tool + S.jig.matBase + N * S.jig.matPerPart);
+    lead = nre ? P.leadDays.assemblyNewTool : P.leadDays.assembly;
+    warn.push('Assemblies are a rough order of magnitude. Upload your CAD; engineering will break it into parts, joints and tooling for the firm quote.');
+    spec.push(`Assembly: ${N} molded components, ~${A} m² total laminate, ~${n} plies avg, ${m.label}, ${J} bonded joints, ${I} inserts/fasteners, ${c.label}, ${nre ? 'new molds + jig' : 'existing tooling'}`);
   }
   const unitP = price(hr * lm, mat), lines = [
-    [`Parts: ${q} × ${usd2(unitP)}`, unitP * q],
+    [`${kind === 'assembly' ? 'Assemblies' : 'Parts'}: ${q} × ${usd2(unitP)}`, unitP * q],
     setup && ['Setup and programming', setup],
-    nre && ['Tooling / mold (one-time)', nre],
-    ['Engineering review and approval', price(P.reviewHours, 0)],
+    nre && [kind === 'assembly' ? 'Molds and assembly jig (one-time)' : 'Tooling / mold (one-time)', nre],
+    ['Engineering review and approval', price(kind === 'assembly' ? P.assembly.reviewHours : P.reviewHours, 0)],
   ].filter(Boolean);
   let total = lines.reduce((s, l) => s + l[1], 0);
   if (total < P.minOrder) { lines.push(['Minimum order adjustment', P.minOrder - total]); total = P.minOrder; }
@@ -307,7 +335,7 @@ let last;
 function render(){
   last = calc();
   $('#tot').textContent = usd(last.total);
-  $('#per').textContent = `${usd(last.total / last.q)} per part, all-in · ${last.lead[0]}–${last.lead[1]} working days after approval`;
+  $('#per').textContent = `${usd(last.total / last.q)} per ${kind === 'assembly' ? 'assembly' : 'part'}, all-in · ${last.lead[0]}–${last.lead[1]} working days after approval`;
   $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Budget total</td><td class="n">${usd(last.total)}</td></tr>`;
   $('#warn').innerHTML = last.warn.map(w => `<div>${w}</div>`).join('');
 }
@@ -316,6 +344,10 @@ function setKind(k){
   kind = k;
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.k === k));
   qf.querySelectorAll('fieldset').forEach(f => f.hidden = f.dataset.k !== k);
+  $('#up').hidden = k === 'panel';
+  $('#sendnote').textContent = UPLOAD_URL
+    ? (k === 'panel' ? 'Sends your configuration to Wyspa engineering. Email a DXF afterward if you have one.' : 'Sends your configuration and geometry files to Wyspa engineering.')
+    : 'This opens an email with your configuration filled in. Attach STEP, DXF, PDF or a sketch before sending.';
   try { localStorage.setItem('wb-kind', k); } catch(e) {}
   render();
 }
@@ -332,14 +364,32 @@ function summary(){
     `Lead time: ${last.lead[0]}-${last.lead[1]} working days after approval`,
     ...(last.warn.length ? ['', 'Notes:', ...last.warn.map(w => '- ' + w)] : []), '',
     `Name: ${s.name.value}`, `Company: ${s.org.value}`, `Email: ${s.email.value}`, `Need by: ${s.need.value || 'flexible'}`,
-    `Application and loads: ${s.notes.value}`, '', '[Attach CAD / drawings / sketch]'
+    `Application and loads: ${s.notes.value}`, '', UPLOAD_URL ? '' : '[Attach CAD / drawings / sketch]'
   ].join('\n');
 }
-$('#go').onclick = () => {
-  const sf = $('#sf');
-  if (!sf.reportValidity()) return;
+const mailto = () => {
   location.href = `mailto:casey@wyspa.tech?subject=${encodeURIComponent('Quote request ' + qid)}&body=${encodeURIComponent(summary())}`;
-  $('#msg').textContent = `Your email app should open now. If it doesn't, use Copy summary and email it to casey@wyspa.tech, quoting ${qid}.`;
+  $('#msg').textContent = `Your email app should open now. Attach your files there. If it doesn't open, use Copy summary and email casey@wyspa.tech, quoting ${qid}.`;
+};
+const b64 = f => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(f); });
+$('#go').onclick = async () => {
+  const sf = $('#sf'), go = $('#go');
+  if (!sf.reportValidity()) return;
+  if (!UPLOAD_URL) return mailto();
+  const files = kind === 'panel' ? [] : [...sf.elements.files.files];
+  if (files.length > 10) return void ($('#msg').textContent = 'Up to 10 files, please. Zip them if you have more.');
+  if (files.reduce((t, f) => t + f.size, 0) > 25e6) return void ($('#msg').textContent = 'Files total more than 25 MB. Zip them, or send the request without them and we will reply with a larger upload link.');
+  go.disabled = true; $('#msg').textContent = files.length ? `Uploading ${files.length} file${files.length > 1 ? 's' : ''}…` : 'Sending…';
+  try {
+    const body = JSON.stringify({ qid, email: sf.elements.email.value, website: sf.elements.website.value, summary: summary(),
+      files: await Promise.all(files.map(async f => ({ name: f.name, type: f.type, data: await b64(f) }))) });
+    const r = await (await fetch(UPLOAD_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body })).json();
+    if (!r.ok) throw new Error(r.error || 'upload failed');
+    $('#msg').textContent = `Request ${qid} received${r.files ? ` with ${r.files} file${r.files > 1 ? 's' : ''}` : ''}. Wyspa engineering will reply by email. This is not an order; nothing is charged until you approve a firm quote.`;
+  } catch (e) {
+    $('#msg').textContent = 'Upload failed, so we are opening an email instead. Attach your files there.';
+    setTimeout(mailto, 1500);
+  } finally { go.disabled = false; }
 };
 $('#cp').onclick = async () => {
   try { await navigator.clipboard.writeText(summary()); $('#msg').textContent = 'Summary copied.'; }
