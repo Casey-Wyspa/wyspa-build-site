@@ -9,4 +9,4 @@ Quote requests go out by email (mailto to casey@wyspa.tech) with a reference ID 
 
 ## File uploads
 
-Geometry uploads (rotor, molded part, assembly) post to a Google Apps Script web app (`upload-script/Code.gs`) that saves files to the Drive folder "Wyspa Build Quote Requests" and emails casey@wyspa.tech. Set its `/exec` URL as `uploadUrl` in `pricing.js`. While `uploadUrl` is empty, the page falls back to a pre-filled email.
+Geometry uploads (rotor, molded part, assembly) post to a Google Apps Script web app (`upload-script/Code.gs`) that runs as ai@wyspa.tech, saves files to Drive `Wyspa Tech/Share/AI/6 - Build quote requests` and emails casey@wyspa.tech. Set its `/exec` URL as `uploadUrl` in `pricing.js`. While `uploadUrl` is empty, the page falls back to a pre-filled email.
