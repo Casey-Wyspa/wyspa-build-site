@@ -142,7 +142,7 @@ html,body{margin:0;background:#eef2f3}
 <section id="quote">
  <div class="sh"><div class="lb">Price</div><div><h2>Get a price</h2><p>An estimate now. A firm quote after an engineer checks your part.</p></div></div>
 
- <div class="drop" id="drop"><input type="file" id="cad" accept=".dxf,.step,.stp,.iges,.igs,.stl" hidden><label for="cad" class="btn pr">Upload a file</label><span>Drop a DXF, STEP or STL for an instant price, or fill in the fields.</span></div>
+ <div class="drop" id="drop"><input type="file" id="cad" accept=".dxf,.step,.stp,.iges,.igs,.stl,.3dm" hidden><label for="cad" class="btn pr">Upload a file</label><span>Drop a DXF, STEP, STL or Rhino file for an instant price, or fill in the fields.</span></div>
  <p class="note" id="cadmsg"></p>
  <div class="tabs" role="tablist">
   <button type="button" role="tab" aria-selected="true" data-k="panel">Flat panel</button>
@@ -332,10 +332,10 @@ function applyFile(g, file) {
   } else if (g.kind === 'panel') {
     setKind('panel');
     put('pL', r(g.L)); put('pW', r(g.W));
-    if (g.T) put('pT', Math.max(0.3, +g.T.toFixed(1)));
+    if (g.T > 0.2) put('pT', Math.max(0.3, +g.T.toFixed(1)));
     if (g.holes != null) put('pHoles', g.holes);
     fileGeo = g.cutM ? { L: r(g.L), W: r(g.W), cutM: g.cutM } : null;
-    what = `${r(g.L)} × ${r(g.W)} mm${g.T ? ` × ${g.T.toFixed(1)} mm` : ''}${g.holes != null ? `, ${g.holes} holes, ${g.cutM.toFixed(1)} m of cutting` : ''}`;
+    what = `${r(g.L)} × ${r(g.W)} mm${g.T > 0.2 ? ` × ${g.T.toFixed(1)} mm` : ''}${g.holes != null ? `, ${g.holes} holes` : ''}${g.cutM ? `, ${g.cutM.toFixed(1)} m of cutting` : ''}`;
   } else {
     setKind('molded');
     put('mL', r(g.L)); put('mW', r(g.W)); put('mH', r(g.H)); put('mTool', 'new');
@@ -344,7 +344,7 @@ function applyFile(g, file) {
     what = `${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm${g.wall ? `, about ${g.wall.toFixed(1)} mm wall` : ''}`;
   }
   render();
-  $('#cadmsg').textContent = `From ${file.name}: ${what} (${g.units}). Check the fields${kind === 'panel' && !g.T ? ', set the thickness' : ''}, then send. Your file is attached.`;
+  $('#cadmsg').textContent = `From ${file.name}: ${what} (${g.units}). Check the fields${kind === 'panel' && !(g.T > 0.2) ? ', set the thickness' : ''}, then send. Your file is attached.`;
 }
 window.WB = { applyFile };
 

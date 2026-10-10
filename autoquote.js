@@ -6,6 +6,7 @@
   const $ = s => document.querySelector(s);
   const say = t => { $('#cadmsg').textContent = t; };
   const OCCT = 'https://cdn.jsdelivr.net/npm/occt-import-js@0.0.23/dist/';
+  const RH = 'https://cdn.jsdelivr.net/npm/rhino3dm@8.17.0/';
 
   async function handle(file) {
     const ext = file.name.split('.').pop().toLowerCase();
@@ -15,7 +16,11 @@
       if (ext === 'dxf') geo = fromDxf(await file.text());
       else if (ext === 'stl') geo = fromMesh(parseStl(await file.arrayBuffer()));
       else if (['step', 'stp', 'iges', 'igs'].includes(ext)) geo = fromMesh(await parseCad(file, ext), 'mm from file');
-      else return say('Use a DXF, STEP, IGES or STL file, or fill in the fields below.');
+      else if (ext === '3dm') geo = await parse3dm(file);
+      else {
+        say(`We can't read .${ext} files here. Export a STEP or DXF and drop that in, or fill in the fields. Your file will still be sent with the request.`);
+        return window.WB.applyFile(null, file);
+      }
       window.WB.applyFile(geo, file);
     } catch (e) {
       say(`Couldn't read ${file.name}. Fill in the fields below; your file will still be sent with the request.`);
@@ -121,6 +126,50 @@
       for (let i = 0; i < idx.length; i++) tri.push(p[idx[i] * 3], p[idx[i] * 3 + 1], p[idx[i] * 3 + 2]);
     }
     return Float32Array.from(tri);
+  }
+
+  // ---------- Rhino .3dm ----------
+  function loadRhino() {
+    if (window._rh) return window._rh;
+    window._rh = new Promise((ok, no) => {
+      const s = document.createElement('script');
+      s.src = RH + 'rhino3dm.min.js';
+      s.onload = () => window.rhino3dm({ locateFile: f => RH + f }).then(ok, no);
+      s.onerror = no;
+      document.head.appendChild(s);
+    });
+    return window._rh;
+  }
+
+  async function parse3dm(file) {
+    say(`Reading ${file.name}… (first Rhino file takes a few seconds)`);
+    const rh = await loadRhino();
+    const doc = rh.File3dm.fromByteArray(new Uint8Array(await file.arrayBuffer()));
+    if (!doc) throw new Error('not a Rhino file');
+    const U = rh.UnitSystem, u = doc.settings().modelUnitSystem.value;
+    const k = { [U.Millimeters.value]: 1, [U.Centimeters.value]: 10, [U.Meters.value]: 1000, [U.Inches.value]: 25.4, [U.Feet.value]: 304.8 }[u] || 1;
+    const tri = [], lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    let curves = 0, closedCurves = 0, solids = 0;
+    const addMesh = m => {
+      if (!m) return;
+      const j = m.toThreejsJSON().data, p = j.attributes.position.array, idx = j.index ? j.index.array : [...Array(p.length / 3).keys()];
+      for (let i = 0; i < idx.length; i++) tri.push(p[idx[i] * 3] * k, p[idx[i] * 3 + 1] * k, p[idx[i] * 3 + 2] * k);
+    };
+    const objs = doc.objects();
+    for (let i = 0; i < objs.count; i++) {
+      const g = objs.get(i).geometry(), b = g.getBoundingBox();
+      for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], b.min[a] * k); hi[a] = Math.max(hi[a], b.max[a] * k); }
+      if (g instanceof rh.Mesh) { addMesh(g); solids++; }
+      else if (g instanceof rh.Brep) { solids++; const f = g.faces(); for (let n = 0; n < f.count; n++) addMesh(f.get(n).getMesh(rh.MeshType.Any)); }
+      else if (g instanceof rh.Extrusion) { solids++; addMesh(g.getMesh(rh.MeshType.Any)); }
+      else if (g instanceof rh.Curve) { curves++; if (g.isClosed) closedCurves++; }
+    }
+    if (!isFinite(lo[0])) throw new Error('empty file');
+    const dims = [0, 1, 2].map(a => hi[a] - lo[a]).sort((x, y) => y - x), units = k === 1 ? 'mm from file' : 'converted to mm';
+    if (!solids && curves) return { kind: 'panel', L: dims[0], W: dims[1], holes: Math.max(0, closedCurves - 1), cutM: 0, units };
+    if (tri.length >= 9) return fromMesh(Float32Array.from(tri), units);
+    // Surfaces saved without render meshes: size only
+    return dims[2] < 0.04 * dims[1] ? { kind: 'panel', L: dims[0], W: dims[1], T: dims[2] || 0, units } : { kind: 'molded', L: dims[0], W: dims[1], H: dims[2], units };
   }
 
   function fromMesh(t, U = 'assumed mm') {
