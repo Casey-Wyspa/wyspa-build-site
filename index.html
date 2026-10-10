@@ -144,7 +144,7 @@ html,body{margin:0;background:#eef2f3}
   <button type="button" role="tab" aria-selected="true" data-k="panel">Flat panel</button>
   <button type="button" role="tab" aria-selected="false" data-k="rotor">Drone rotor</button>
   <button type="button" role="tab" aria-selected="false" data-k="molded">Molded part</button>
-  <button type="button" role="tab" aria-selected="false" data-k="assembly">Assembly / custom</button>
+  <button type="button" role="tab" aria-selected="false" data-k="assembly">Assembly</button>
  </div>
 
  <div class="qt">
@@ -183,7 +183,7 @@ html,body{margin:0;background:#eef2f3}
     <label>Quantity<input type="number" name="qty" value="5" min="1" step="1"></label>
    </fieldset>
    <fieldset data-k="assembly" hidden>
-    <label class="full">What do you need built?<textarea name="aDesc" rows="4" placeholder="Bonded assemblies, multi-part structures, unusual shapes or anything the other tabs don't fit. Describe the parts, how they join, loads and finish."></textarea></label>
+    <label class="full">Describe the assembly<textarea name="aDesc" rows="4" placeholder="Multi-part bonded structures, or anything the other tabs don't cover. List the parts, how they join, loads and finish."></textarea></label>
     <label>Approx. number of parts<input type="number" name="aN" value="" min="1" step="1" placeholder="e.g. 6"></label>
     <label>Overall size (mm)<input type="text" name="aSize" placeholder="L × W × H"></label>
     <label>Material preference<select name="aMat"></select></label>
@@ -274,7 +274,7 @@ const qtyMult = q => P.qtyBreaks.filter(b => q >= b.min).pop().mult;
 const price = (hours, mat) => hours * P.rate + mat * P.materialMult;
 
 function calc(){
-  const q = Math.max(1, Math.round(val('qty') || 1)), warn = [], spec = [], lm = qtyMult(q);
+  const q = Math.max(1, Math.round(val('qty') || 1)), warn = [], spec = [], review = [], lm = qtyMult(q), X = P.review;
   let hr = 0, mat = 0, nre = 0, setup = 0, lead;
   if (kind === 'panel') {
     const L = val('pL'), W = val('pW'), T = val('pT'), m = P.plies[val('pMat')], cored = val('pCore') === 'core', f = P.panel.finish[val('pFin')], C = P.panel;
@@ -283,7 +283,8 @@ function calc(){
     hr = a * (n * C.hrPerM2Ply + f.hrPerM2 + (cored ? C.core.hrPerM2 : 0)) + C.hrPerPart + 2 * (L + W) / 1000 * C.hrPerMCut + (val('pHoles') || 0) * C.hrPerHole;
     setup = price(C.setupHours, 0); lead = P.leadDays.panel;
     const [mx, my] = C.maxSize;
-    if (Math.max(L, W) > mx || Math.min(L, W) > my) warn.push(`Larger than the standard ${mx} × ${my} mm sheet. Needs a joined or custom-pressed panel; engineering will confirm.`);
+    if (Math.max(L, W) > mx || Math.min(L, W) > my) review.push(`Larger than the ${mx} × ${my} mm standard sheet`);
+    if (T > X.panelMaxT) review.push(`Thicker than ${X.panelMaxT} mm`);
     if (cored && T < 6) warn.push('Cored panels under 6 mm are unusual. Check the thickness.');
     spec.push(`Flat panel ${L} × ${W} × ${T} mm, ${m.label}, ${cored ? 'sandwich' : 'solid'} (~${n} plies), ${f.label}, ${val('pHoles') || 0} holes/cut-outs`);
   } else if (kind === 'rotor') {
@@ -292,7 +293,9 @@ function calc(){
     hr = (R.hrBase + D * R.hrPerIn) * bm + R.balanceHours;
     if (geo === 'new' || geo === 'design') nre = price((R.mold.hrBase + D * R.mold.hrPerIn) * (B > 2 ? 1.2 : 1), R.mold.matBase + D * R.mold.matPerIn);
     lead = nre ? P.leadDays.rotorNewMold : P.leadDays.rotor;
-    if (geo === 'design') warn.push('Rotor design (aero, structure, balance) is quoted as engineering hours after review.');
+    if (geo === 'design') review.push('Rotor design by Wyspa');
+    if (D > X.rotorMaxD) review.push(`Diameter over ${X.rotorMaxD} in`);
+    if (B > X.rotorMaxBlades) review.push(`More than ${X.rotorMaxBlades} blades`);
     if (val('rPair') && q % 2) warn.push('Odd quantity with CW/CCW pairs. We will round to full pairs.');
     spec.push(`Rotor ${D} × ${val('rP')} in, ${B}-blade, ${m.label}, ${val('rPair') ? 'CW/CCW pairs' : 'single hand'}, geometry: ${fs('rotor').querySelector('[name=rGeo]').selectedOptions[0].text}`);
   } else if (kind === 'molded') {
@@ -303,13 +306,18 @@ function calc(){
     if (val('mTool') === 'new') nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) * c.tool, a * M.tool.matPerM2 * c.tool);
     lead = nre ? P.leadDays.moldedNewMold : P.leadDays.molded;
     if (q < 3 && nre) warn.push('With one or two parts, tooling is most of the cost. Ask about a printed or machined one-off mold.');
+    if (val('mCx') === 'complex') review.push('Closed or split mold, undercuts');
+    if (Math.max(L, W) > X.moldedMaxDim) review.push(`Longer than ${X.moldedMaxDim} mm`);
+    if (H > X.moldedMaxDepth) review.push(`Deeper than ${X.moldedMaxDepth} mm`);
+    if (n > X.maxPlies) review.push(`More than ${X.maxPlies} plies`);
     spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${a.toFixed(2)} m² surface), ${n} plies, ${m.label}, ${c.label}, ${nre ? 'new mold' : 'customer/existing mold'}`);
   } else {
     const txt = n => fs('assembly').querySelector(`[name="${n}"]`).value.trim();
-    spec.push('Custom / assembly request (no instant price; for engineering review)',
-      `Description: ${txt('aDesc') || '(none given)'}`, `Approx. parts: ${txt('aN') || '?'}`, `Overall size: ${txt('aSize') || '?'} mm`, `Material: ${txt('aMat') || 'not sure'}`);
-    return { q, manual: true, spec, warn: [], lines: [] };
+    review.push('Assembly');
+    spec.push(
+      `Assembly: ${txt('aDesc') || '(none given)'}`, `Approx. parts: ${txt('aN') || '?'}`, `Overall size: ${txt('aSize') || '?'} mm`, `Material: ${txt('aMat') || 'not sure'}`);
   }
+  if (review.length) return { q, manual: true, review, spec, warn: [], lines: [] };
   const unitP = price(hr * lm, mat), lines = [
     [`Parts: ${q} × ${usd2(unitP)}`, unitP * q],
     setup && ['Setup and programming', setup],
@@ -326,9 +334,12 @@ let last;
 function render(){
   last = calc();
   if (last.manual) {
-    $('#estlb').textContent = 'Custom request'; $('#tot').textContent = 'Engineer review'; $('#tot').style.fontSize = 'clamp(30px,4vw,40px)';
-    $('#per').textContent = 'No instant price for this one. Send the request with your CAD or sketch and Wyspa engineering will review it and reply with a quote.';
-    $('#lines').innerHTML = ''; $('#warn').innerHTML = '';
+    $('#estlb').textContent = 'Engineer quote'; $('#tot').textContent = 'Priced by review'; $('#tot').style.fontSize = 'clamp(30px,4vw,40px)';
+    $('#per').textContent = kind === 'assembly'
+      ? 'Send your description and CAD. An engineer reviews it and replies with a quote.'
+      : 'This one needs an engineer to price it. Send the request with your CAD and we reply with a quote.';
+    $('#lines').innerHTML = '';
+    $('#warn').innerHTML = kind === 'assembly' ? '' : `Why: ${last.review.join(' · ')}`;
     return;
   }
   $('#estlb').textContent = 'Budget estimate'; $('#tot').style.fontSize = '';
@@ -344,7 +355,7 @@ function setKind(k){
   qf.querySelectorAll('fieldset').forEach(f => f.hidden = f.dataset.k !== k);
   $('#up').hidden = k === 'panel';
   $('#sendnote').textContent = UPLOAD_URL
-    ? (k === 'panel' ? 'Sends your configuration to Wyspa engineering. Email a DXF afterward if you have one.' : (k === 'assembly' ? 'Sends your description and files to Wyspa engineering for review. You get a quote by email.' : 'Sends your configuration and geometry files to Wyspa engineering.'))
+    ? (k === 'panel' ? 'Sends your configuration to Wyspa engineering. Email a DXF afterward if you have one.' : 'Sends your configuration and geometry files to Wyspa engineering.')
     : 'This opens an email with your configuration filled in. Attach STEP, DXF, PDF or a sketch before sending.';
   try { localStorage.setItem('wb-kind', k); } catch(e) {}
   render();
@@ -355,9 +366,9 @@ qf.addEventListener('input', render);
 function summary(){
   const s = $('#sf').elements;
   return [
-    `Wyspa Build ${last.manual ? 'CUSTOM REVIEW' : 'quote'} request ${qid}`, '',
+    `Wyspa Build ${last.manual ? 'review' : 'quote'} request ${qid}`, '',
     ...last.spec, `Quantity: ${last.q}`, '',
-    ...(last.manual ? ['No instant price: needs engineering review and a manual quote.'] : [
+    ...(last.manual ? [`Needs engineer pricing: ${last.review.join('; ')}`] : [
       ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
       `Budget total: ${usd(last.total)} (budget estimate, not binding)`,
       `Lead time: ${last.lead[0]}-${last.lead[1]} working days after approval`]),
@@ -367,14 +378,14 @@ function summary(){
   ].join('\n');
 }
 const mailto = () => {
-  location.href = `mailto:casey@wyspa.tech?subject=${encodeURIComponent((last.manual ? 'Custom review request ' : 'Quote request ') + qid)}&body=${encodeURIComponent(summary())}`;
+  location.href = `mailto:casey@wyspa.tech?subject=${encodeURIComponent((last.manual ? 'Review request ' : 'Quote request ') + qid)}&body=${encodeURIComponent(summary())}`;
   $('#msg').textContent = `Your email app should open now. Attach your files there. If it doesn't open, use Copy summary and email casey@wyspa.tech, quoting ${qid}.`;
 };
 const b64 = f => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(f); });
 $('#go').onclick = async () => {
   const sf = $('#sf'), go = $('#go');
   if (!sf.reportValidity()) return;
-  if (last.manual && !fs('assembly').querySelector('[name=aDesc]').value.trim()) { $('#msg').textContent = 'Describe what you need built so engineering can review it.'; fs('assembly').querySelector('[name=aDesc]').focus(); return; }
+  if (kind === 'assembly' && !fs('assembly').querySelector('[name=aDesc]').value.trim()) { $('#msg').textContent = 'Describe the assembly so engineering can review it.'; fs('assembly').querySelector('[name=aDesc]').focus(); return; }
   if (!UPLOAD_URL) return mailto();
   const files = kind === 'panel' ? [] : [...sf.elements.files.files];
   if (files.length > 10) return void ($('#msg').textContent = 'Up to 10 files, please. Zip them if you have more.');

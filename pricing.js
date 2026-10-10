@@ -60,11 +60,21 @@ window.WYSPA_PRICING = {
     complexity: {
       simple:  { label: "Simple: open, shallow, no undercuts",   labor: 1.0, tool: 1.0 },
       medium:  { label: "Medium: curved, flanges, inserts",      labor: 1.6, tool: 1.7 },
-      complex: { label: "Complex: closed/split mold, undercuts", labor: 2.6, tool: 2.8 },
+      complex: { label: "Complex: closed/split mold, undercuts (engineer quote)", labor: 2.6, tool: 2.8 },
     },
     hrPerPart: 1.0, trimHours: 0.5,        // prep/demold and trim per part
     hrPerM2: 0.5, hrPerM2Ply: 0.12,        // layup per m² of surface, plus per ply
     tool: { hrMin: 16, hrPerM2: 30, matPerM2: 250 },  // plug + mold
+  },
+
+  // Anything past these limits gets no instant price; it goes to engineer review instead
+  review: {
+    panelMaxT: 25,            // mm
+    rotorMaxD: 40,            // in
+    rotorMaxBlades: 3,
+    moldedMaxDim: 1500,       // mm, longest side
+    moldedMaxDepth: 400,      // mm
+    maxPlies: 20,
   },
 
   // Lead time in working days by order type (before any shipping)
