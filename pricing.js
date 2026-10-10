@@ -67,16 +67,6 @@ window.WYSPA_PRICING = {
     tool: { hrMin: 16, hrPerM2: 30, matPerM2: 250 },  // plug + mold
   },
 
-  // Complex assemblies: several molded parts bonded together with inserts
-  assembly: {
-    materials: ["carbon", "prepreg", "glass", "hybrid"],
-    hrPerJoint: 0.75, adhesivePerJoint: 6,   // prep, bond, cure, clean per joint
-    hrPerInsert: 0.25, insertMat: 8,         // potted insert or fastener install
-    hrQA: 3,                                 // final dimensional and visual inspection per assembly
-    jig: { hrBase: 8, hrPerPart: 2, matBase: 150, matPerPart: 30 },  // assembly fixture
-    reviewHours: 8,                          // engineering review for an assembly
-  },
-
   // Lead time in working days by order type (before any shipping)
-  leadDays: { panel: [10, 15], rotor: [15, 20], rotorNewMold: [25, 35], molded: [20, 30], moldedNewMold: [35, 50], assembly: [30, 45], assemblyNewTool: [50, 75] },
+  leadDays: { panel: [10, 15], rotor: [15, 20], rotorNewMold: [25, 35], molded: [20, 30], moldedNewMold: [35, 50] },
 };

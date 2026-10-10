@@ -1,10 +1,10 @@
 // Wyspa Build quote intake: receives quote requests and geometry files from
 // build.wyspa.tech, saves them to Google Drive and emails the request.
-// Deploy: Extensions > Apps Script (or script.google.com) > paste this file >
-// Deploy > New deployment > Web app > Execute as: Me, Who has access: Anyone.
+// Owned by ai@wyspa.tech; files land in Drive: Wyspa Tech/Share/AI/6 - Build quote requests.
+// Deployed as a web app (executeAs: owner, access: anyone; see appsscript.json).
 // Put the resulting /exec URL in pricing.js `uploadUrl`.
 
-const FOLDER_NAME = 'Wyspa Build Quote Requests';
+const FOLDER_ID = '1qPenfnMvJIZVivt4dVR-LO9EIJpQXXKy';  // Share/AI/6 - Build quote requests
 const NOTIFY = 'casey@wyspa.tech';
 const MAX_BYTES = 25 * 1024 * 1024;
 const MAX_FILES = 10;
@@ -57,8 +57,13 @@ function doPost(e) {
 }
 
 function rootFolder_() {
-  const it = DriveApp.getFoldersByName(FOLDER_NAME);
-  return it.hasNext() ? it.next() : DriveApp.createFolder(FOLDER_NAME);
+  return DriveApp.getFolderById(FOLDER_ID);
+}
+
+// Visiting the /exec URL while signed in as the owner grants Drive and Gmail access once.
+function doGet() {
+  rootFolder_();
+  return out({ ok: true, service: 'Wyspa Build quote intake' });
 }
 
 function out(o) {
