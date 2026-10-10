@@ -20,21 +20,22 @@ window.WYSPA_PRICING = {
 
   // Raw material cost per m² per ply (fabric + resin), with ply thickness in mm
   plies: {
-    carbon:  { label: "Carbon fiber (wet / vacuum)", perM2: 55, t: 0.25 },
-    prepreg: { label: "Carbon prepreg (oven cure)",  perM2: 95, t: 0.25 },
-    glass:   { label: "Fiberglass (E-glass)",        perM2: 18, t: 0.25 },
-    hybrid:  { label: "Carbon/glass hybrid",         perM2: 38, t: 0.25 },
+    carbon:  { label: "Carbon fiber", perM2: 55, t: 0.25 },
+    prepreg: { label: "Carbon prepreg",  perM2: 95, t: 0.25 },
+    glass:   { label: "Fiberglass",        perM2: 18, t: 0.25 },
+    hybrid:  { label: "Carbon + glass",         perM2: 38, t: 0.25 },
   },
   consumablesPerM2: 20,       // peel ply, bag, breather, release, per m² of part per cure
 
   // Flat panels: laid up flat, cured, CNC cut
   panel: {
     materials: ["carbon", "prepreg", "glass", "hybrid"],
-    core: { label: "Foam/honeycomb core", perM2: 70, hrPerM2: 0.4 },
+    core: { label: "Foam core", perM2mm: 7, hrPerM2: 0.4, minT: 2 },  // core $ per m² per mm of core thickness
+    gsmPerMm: 1000,           // fabric weight per mm of cured skin (0.1 mm per 100 gsm)
     finish: {
-      matte: { label: "Peel-ply / matte", perM2: 0,  hrPerM2: 0 },
+      matte: { label: "Matte", perM2: 0,  hrPerM2: 0 },
       gloss: { label: "Gloss one side",   perM2: 15, hrPerM2: 0.6 },
-      clear: { label: "Clear-coat UV",    perM2: 30, hrPerM2: 1.2 },
+      clear: { label: "Clear coat",    perM2: 30, hrPerM2: 1.2 },
     },
     hrPerM2Ply: 0.08,         // layup per m² per ply
     hrPerPart: 0.2,           // demold, inspect, handle
@@ -58,9 +59,9 @@ window.WYSPA_PRICING = {
   molded: {
     materials: ["carbon", "prepreg", "glass", "hybrid"],
     complexity: {
-      simple:  { label: "Simple: open, shallow, no undercuts",   labor: 1.0, tool: 1.0 },
-      medium:  { label: "Medium: curved, flanges, inserts",      labor: 1.6, tool: 1.7 },
-      complex: { label: "Complex: closed/split mold, undercuts (engineer quote)", labor: 2.6, tool: 2.8 },
+      simple:  { label: "Simple (open, shallow)",   labor: 1.0, tool: 1.0 },
+      medium:  { label: "Curved, with flanges or inserts",      labor: 1.6, tool: 1.7 },
+      complex: { label: "Complex (engineer quote)", labor: 2.6, tool: 2.8 },
     },
     hrPerPart: 1.0, trimHours: 0.5,        // prep/demold and trim per part
     hrPerM2: 0.5, hrPerM2Ply: 0.12,        // layup per m² of surface, plus per ply
