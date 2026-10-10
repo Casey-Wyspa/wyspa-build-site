@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Composite Parts Quote | Wyspa Build</title>
+<meta name="description" content="Instant budgetary quotes for composite flat panels, drone rotors and molded parts. Engineering-reviewed by Wyspa, built by partner shops.">
+<meta property="og:title" content="Wyspa Build: Composite Parts, Quoted Instantly">
+<meta property="og:description" content="Price a composite part in seconds. Wyspa engineering approves it, a partner builder makes it.">
+<meta property="og:url" content="https://build.wyspa.tech/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230d2430'/%3E%3Cpath d='M6 10h20M6 16h20M6 22h20' stroke='%23d9480f' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,600;125,800&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+html,body{margin:0;background:#eef2f3}
+.wb{--paper:#eef2f3;--sheet:#f8fafa;--ink:#0d2430;--muted:#4d6470;--rule:#c4d1d6;--signal:#d9480f;--sea:#0e6e7e;
+ --d:"Archivo","Arial Narrow",sans-serif;--b:"IBM Plex Sans",system-ui,sans-serif;--m:"IBM Plex Mono",Consolas,monospace;
+ background:var(--paper);color:var(--ink);font:400 16px/1.6 var(--b);padding:clamp(20px,4vw,48px) clamp(16px,4vw,48px);box-sizing:border-box}
+.wb *{box-sizing:border-box}
+.wb .w{max-width:1120px;margin:0 auto}
+.wb h1,.wb h2,.wb h3{font-family:var(--d);color:var(--ink);margin:0;line-height:1.05;text-wrap:balance}
+.wb p{margin:0}
+.wb a{color:var(--sea)}
+.wb .lb{font:500 12px/1.3 var(--m);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.wb .hero{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:40px;align-items:center;padding-bottom:40px}
+.wb h1{font-size:clamp(34px,5.2vw,64px);font-weight:800;font-stretch:125%;margin-top:14px}
+.wb h1 em{font-style:normal;color:var(--signal)}
+.wb .lead{max-width:58ch;color:var(--muted);font-size:18px;margin-top:20px}
+.wb .cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+.wb .btn{display:inline-block;padding:12px 20px;font:600 15px/1 var(--b);text-decoration:none;border:1.5px solid var(--ink);color:var(--ink);background:none;cursor:pointer}
+.wb .btn.pr{background:var(--ink);color:var(--paper)}
+.wb .btn:hover{border-color:var(--signal)}
+.wb .fig{background:var(--sheet);border:1px solid var(--rule);padding:16px;margin:0}
+.wb .fig svg{width:100%;height:auto;display:block}
+.wb .cap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-top:8px}
+.wb .cap .lb{text-transform:none;letter-spacing:.04em}
+.wb section{padding:48px 0;border-top:1px solid var(--rule)}
+.wb .sh{display:grid;grid-template-columns:minmax(0,220px) minmax(0,1fr);gap:24px;margin-bottom:28px}
+.wb h2{font-size:clamp(26px,3vw,36px);font-weight:800;font-stretch:112%}
+.wb .sh p{margin-top:10px;color:var(--muted);max-width:62ch}
+.wb h3{font-size:20px;font-weight:600;font-stretch:112%}
+.wb .steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;list-style:none;margin:0;padding:0;counter-reset:s}
+.wb .steps li{border-top:3px solid var(--ink);padding-top:14px;counter-increment:s}
+.wb .steps li::before{content:"0" counter(s);display:block;font:500 13px var(--m);color:var(--signal);margin-bottom:6px}
+.wb .steps h3{font-size:17px;margin-bottom:6px}
+.wb .steps p{color:var(--muted);font-size:15px}
+/* quote tool */
+.wb .tabs{display:flex;flex-wrap:wrap;border:1.5px solid var(--ink);width:fit-content;max-width:100%}
+.wb .tabs button{font:600 15px/1 var(--b);padding:12px 18px;background:none;border:0;border-right:1px solid var(--rule);color:var(--ink);cursor:pointer}
+.wb .tabs button:last-child{border-right:0}
+.wb .tabs button[aria-selected=true]{background:var(--ink);color:var(--paper)}
+.wb .qt{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:32px;margin-top:24px;align-items:start}
+.wb form fieldset{border:0;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px}
+.wb fieldset[hidden]{display:none}
+.wb label{display:grid;gap:6px;font:500 12px/1.3 var(--m);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.wb label.full{grid-column:1/-1}
+.wb input,.wb select,.wb textarea{font:400 16px/1.4 var(--b);color:var(--ink);background:var(--sheet);border:1px solid var(--rule);padding:10px 12px;width:100%;border-radius:0;text-transform:none;letter-spacing:0}
+.wb input:focus,.wb select:focus,.wb textarea:focus{outline:2px solid var(--sea);outline-offset:-1px}
+.wb .chk{display:flex;gap:10px;align-items:center;text-transform:none;letter-spacing:0;font:400 15px var(--b);color:var(--ink)}
+.wb .chk input{width:auto}
+.wb .est{background:var(--sheet);border:1.5px solid var(--ink);padding:24px;position:sticky;top:16px}
+.wb .est .tot{font:800 clamp(36px,5vw,52px)/1 var(--d);font-stretch:125%;margin:10px 0 4px}
+.wb .est table{width:100%;border-collapse:collapse;font-size:15px;margin-top:16px}
+.wb .est td{padding:8px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+.wb .est td.n{text-align:right;font-family:var(--m);font-variant-numeric:tabular-nums;white-space:nowrap;padding-left:12px}
+.wb .est tr.t td{font-weight:600;border-bottom:0;border-top:1.5px solid var(--ink)}
+.wb .warn{margin-top:12px;padding:10px 12px;border-left:3px solid var(--signal);font-size:14px;color:var(--ink);background:#fff}
+.wb .warn:empty{display:none}
+.wb .note{font-size:13px;color:var(--muted);margin-top:12px}
+.wb .send{margin-top:28px;padding-top:24px;border-top:1px solid var(--rule)}
+.wb .send fieldset{margin-top:16px}
+.wb .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px}
+.wb .pp{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.wb .pp li{padding-left:16px;border-left:3px solid var(--sea);color:var(--muted)}
+.wb .pp b{color:var(--ink);font-weight:600}
+.wb .ct{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-top:24px}
+.wb .ct .v{font:500 18px var(--m);color:var(--ink)}
+@media (max-width:820px){
+ .wb .hero,.wb .two,.wb .sh,.wb .qt{grid-template-columns:minmax(0,1fr)}
+ .wb .steps{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .wb .est{position:static}
+}
+@media (max-width:520px){
+ .wb form fieldset,.wb .steps{grid-template-columns:minmax(0,1fr)}
+ .wb .tabs{width:100%}
+ .wb .tabs button{flex:1;padding:12px 8px}
+}
+@media print{
+ .wb .hero,.wb #how,.wb #engineering,.wb #builders,.wb .tabs,.wb .send,.wb .top{display:none}
+ .wb .qt{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<div class="wb top" style="padding-bottom:0"><div class="w" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;border-bottom:1px solid var(--rule);padding-bottom:16px"><a href="https://www.wyspa.tech" style="font:800 18px/1 var(--d);font-stretch:125%;letter-spacing:.04em;color:var(--ink);text-decoration:none">WYSPA<span style="color:var(--signal)">/</span>BUILD</a><a href="https://www.wyspa.tech" style="font:500 13px var(--m);color:var(--muted)">← wyspa.tech</a></div></div>
+
+<div class="wb"><div class="w">
+<header class="hero">
+ <div>
+  <div class="lb">Wyspa Technologies · Composite Parts</div>
+  <h1>Composite parts, <em>priced</em> in seconds. Engineered before they're built.</h1>
+  <p class="lead">Flat panels, drone rotors and molded parts. Get a budget price now; Wyspa engineering checks the laminate and drawings, then a partner shop builds it.</p>
+  <div class="cta"><a class="btn pr" href="#quote">Get a quote</a><a class="btn" href="#builders">For builders</a></div>
+ </div>
+ <figure class="fig">
+  <svg viewBox="0 0 800 400" role="img" aria-label="Exploded laminate stack with plies at 0, +45, -45 and 90 degrees over a foam core">
+   <defs>
+    <pattern id="p0" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M0 6H12" stroke="#0d2430" stroke-width="1.2" opacity=".55"/></pattern>
+    <pattern id="p45" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0 6H12" stroke="#0e6e7e" stroke-width="1.2" opacity=".7"/></pattern>
+    <pattern id="pm45" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><path d="M0 6H12" stroke="#0e6e7e" stroke-width="1.2" opacity=".7"/></pattern>
+    <pattern id="p90" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M6 0V12" stroke="#0d2430" stroke-width="1.2" opacity=".55"/></pattern>
+    <pattern id="pc" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="8" cy="8" r="2" fill="#c4d1d6"/></pattern>
+   </defs>
+   <g stroke="#0d2430" stroke-width="2">
+    <path d="M140 300 L520 300 L660 240 L280 240 Z" fill="#f8fafa"/><path d="M140 300 L520 300 L660 240 L280 240 Z" fill="url(#p0)"/>
+    <path d="M140 262 L520 262 L660 202 L280 202 Z" fill="#f8fafa"/><path d="M140 262 L520 262 L660 202 L280 202 Z" fill="url(#p90)"/>
+    <path d="M140 212 L520 212 L660 152 L280 152 Z" fill="#fff"/><path d="M140 212 L520 212 L660 152 L280 152 Z" fill="url(#pc)"/>
+    <path d="M140 160 L520 160 L660 100 L280 100 Z" fill="#f8fafa"/><path d="M140 160 L520 160 L660 100 L280 100 Z" fill="url(#p45)"/>
+    <path d="M140 122 L520 122 L660 62 L280 62 Z" fill="#f8fafa"/><path d="M140 122 L520 122 L660 62 L280 62 Z" fill="url(#pm45)"/>
+   </g>
+   <g font-family="IBM Plex Mono,monospace" font-size="17" fill="#4d6470">
+    <text x="680" y="98">−45°</text><text x="680" y="136">+45°</text><text x="680" y="188" fill="#d9480f">core</text><text x="680" y="238">90°</text><text x="680" y="276">0°</text>
+   </g>
+  </svg>
+  <div class="cap"><span class="lb">Sandwich laminate [±45 / core / 90 / 0]</span><span class="lb">Ply-failure checked</span></div>
+ </figure>
+</header>
+
+<section id="how">
+ <div class="sh"><div class="lb">How it works</div><div><h2>From price to part</h2></div></div>
+ <ol class="steps">
+  <li><h3>Configure</h3><p>Pick a part type, size, material and quantity. The budget price updates as you go.</p></li>
+  <li><h3>Send the request</h3><p>Send the configuration with your CAD or sketch. You get a reference number.</p></li>
+  <li><h3>Engineering approval</h3><p>Wyspa checks the laminate, loads and drawings and confirms the design can be built. We fix it with you if needed.</p></li>
+  <li><h3>Built by a partner</h3><p>An approved builder makes the part to Wyspa's laminate schedule and flat ply patterns. You get a firm quote before any work starts.</p></li>
+ </ol>
+</section>
+
+<section id="quote">
+ <div class="sh"><div class="lb">Instant quote</div><div><h2>Price your part</h2><p>Budget estimate only. You get a firm price after engineering review, and nothing is charged until you approve it.</p></div></div>
+
+ <div class="tabs" role="tablist">
+  <button type="button" role="tab" aria-selected="true" data-k="panel">Flat panel</button>
+  <button type="button" role="tab" aria-selected="false" data-k="rotor">Drone rotor</button>
+  <button type="button" role="tab" aria-selected="false" data-k="molded">Molded part</button>
+ </div>
+
+ <div class="qt">
+  <form id="qf" onsubmit="return false">
+   <fieldset data-k="panel">
+    <label>Length (mm)<input type="number" name="pL" value="600" min="10" step="1"></label>
+    <label>Width (mm)<input type="number" name="pW" value="400" min="10" step="1"></label>
+    <label>Thickness (mm)<input type="number" name="pT" value="2" min="0.3" max="50" step="0.1"></label>
+    <label>Material<select name="pMat"></select></label>
+    <label>Construction<select name="pCore"><option value="solid">Solid laminate</option><option value="core">Sandwich (cored)</option></select></label>
+    <label>Finish<select name="pFin"></select></label>
+    <label>Holes / cut-outs per panel<input type="number" name="pHoles" value="4" min="0" step="1"></label>
+    <label>Quantity<input type="number" name="qty" value="10" min="1" step="1"></label>
+   </fieldset>
+   <fieldset data-k="rotor" hidden>
+    <label>Diameter (in)<input type="number" name="rD" value="15" min="3" max="80" step="0.5"></label>
+    <label>Pitch (in)<input type="number" name="rP" value="5" min="1" max="40" step="0.1"></label>
+    <label>Blades<select name="rB"><option>2</option><option>3</option><option>4</option></select></label>
+    <label>Material<select name="rMat"></select></label>
+    <label class="full">Geometry<select name="rGeo">
+     <option value="new">My CAD, new mold needed</option>
+     <option value="repeat">Repeat order, existing mold</option>
+     <option value="design">Wyspa designs the rotor (engineering quoted separately)</option>
+    </select></label>
+    <label class="chk full"><input type="checkbox" name="rPair" checked> Supply as CW / CCW pairs</label>
+    <label>Quantity (rotors)<input type="number" name="qty" value="8" min="1" step="1"></label>
+   </fieldset>
+   <fieldset data-k="molded" hidden>
+    <label>Length (mm)<input type="number" name="mL" value="500" min="10" step="1"></label>
+    <label>Width (mm)<input type="number" name="mW" value="300" min="10" step="1"></label>
+    <label>Depth (mm)<input type="number" name="mH" value="80" min="0" step="1"></label>
+    <label>Plies<input type="number" name="mPly" value="4" min="1" max="40" step="1"></label>
+    <label>Material<select name="mMat"></select></label>
+    <label>Tooling<select name="mTool"><option value="new">New mold needed</option><option value="have">I supply the mold / existing</option></select></label>
+    <label class="full">Complexity<select name="mCx"></select></label>
+    <label>Quantity<input type="number" name="qty" value="5" min="1" step="1"></label>
+   </fieldset>
+  </form>
+
+  <aside class="est" aria-live="polite">
+   <div class="lb">Budget estimate · <span id="qid"></span></div>
+   <div class="tot" id="tot">$0</div>
+   <div class="note" style="margin-top:0" id="per"></div>
+   <table id="lines"></table>
+   <div class="warn" id="warn"></div>
+   <p class="note">Assumes standard tolerances and shipping from a US partner shop. Final price depends on the approved laminate, drawings and finish.</p>
+  </aside>
+ </div>
+
+ <div class="send">
+  <h3>Request a firm quote</h3>
+  <p class="note" style="margin-top:6px">This opens an email with your configuration filled in. Attach STEP, DXF, PDF or a sketch before sending.</p>
+  <form id="sf" onsubmit="return false">
+   <fieldset>
+    <label>Name<input name="name" autocomplete="name" required></label>
+    <label>Company<input name="org" autocomplete="organization"></label>
+    <label>Email<input name="email" type="email" autocomplete="email" required></label>
+    <label>Need-by date<input name="need" type="date"></label>
+    <label class="full">Application and loads<textarea name="notes" rows="3" placeholder="What does the part do, what loads or environment does it see, any tolerance or weight targets"></textarea></label>
+   </fieldset>
+  </form>
+  <div class="cta"><button class="btn pr" type="button" id="go">Email request</button><button class="btn" type="button" id="cp">Copy summary</button><button class="btn" type="button" onclick="print()">Print</button></div>
+  <p class="note" id="msg"></p>
+ </div>
+</section>
+
+<section id="engineering">
+ <div class="sh"><div class="lb">Engineering approval</div><div><h2>Every order is checked by an engineer</h2><p>Instant prices make quoting fast. Engineering review makes sure the part works.</p></div></div>
+ <ul class="pp">
+  <li><b>Laminate check.</b> Classical laminate theory with ply-by-ply failure analysis against your stated loads.</li>
+  <li><b>Flat ply patterns.</b> Cut patterns and drape prediction so the builder cuts each ply right the first time.</li>
+  <li><b>Build check.</b> Ply drops, radii, inserts, tolerances and finish, confirmed with the builder before cutting.</li>
+  <li><b>Approved drawing package.</b> Laminate schedule, drawings and cut files, signed off before the firm quote.</li>
+ </ul>
+</section>
+
+<section id="builders">
+ <div class="sh"><div class="lb">For builders</div><div><h2>Build with Wyspa</h2><p>We're lining up composite shops for panel cutting, prop and rotor molding, and wet, vacuum-bagged and prepreg layup. We send approved work with the engineering done. You set your own rates and lead times.</p></div></div>
+ <div class="two">
+  <ul class="pp">
+   <li><b>What you get.</b> Approved drawings, laminate schedule, flat ply patterns and cut files. One engineering contact.</li>
+   <li><b>What we ask.</b> Your capabilities, maximum part size, materials you stock, and rates or a price sheet so the instant quote matches your costs.</li>
+  </ul>
+  <div>
+   <p style="color:var(--muted)">Tell us what your shop builds and we'll set up a call.</p>
+   <div class="ct" style="margin-top:16px"><a class="btn pr" href="mailto:casey@wyspa.tech?subject=Wyspa%20Build%20-%20builder%20partner&amp;body=Shop%20name%3A%0ALocation%3A%0AProcesses%20(cutting%2C%20wet%20layup%2C%20infusion%2C%20prepreg%2C%20autoclave)%3A%0AMax%20part%20size%3A%0AMaterials%20stocked%3A%0ATypical%20lead%20time%3A%0A">Become a builder partner</a></div>
+  </div>
+ </div>
+ <div class="ct"><a class="v" href="mailto:casey@wyspa.tech">casey@wyspa.tech</a><span class="v">(401) 523-4920</span></div>
+</section>
+</div></div>
+
+<div class="wb" style="padding-top:0"><div class="w" style="border-top:1px solid var(--rule);padding-top:16px;font-size:13px;color:var(--muted)">© 2026 Wyspa Technologies LLC · Instant prices are budget estimates, not binding quotes. A firm quote follows engineering review.</div></div>
+
+<script src="pricing.js"></script>
+<script>
+(function(){
+const P = window.WYSPA_PRICING, $ = s => document.querySelector(s), qf = $('#qf');
+const usd = n => '$' + Math.round(n).toLocaleString('en-US');
+const usd2 = n => '$' + n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const fill = (sel, obj) => { sel.innerHTML = Object.entries(obj).map(([k,v]) => `<option value="${k}">${v.label}</option>`).join(''); };
+fill(qf.elements.pMat, P.panel.materials); fill(qf.elements.pFin, P.panel.finish);
+fill(qf.elements.rMat, P.rotor.materials); fill(qf.elements.mMat, P.molded.materials); fill(qf.elements.mCx, P.molded.complexity);
+
+let kind = 'panel';
+try { const k = localStorage.getItem('wb-kind'); if (k && P[k]) kind = k; } catch(e) {}
+const d = new Date(), qid = 'WB-' + d.toISOString().slice(2,10).replace(/-/g,'') + '-' + Math.random().toString(36).slice(2,6).toUpperCase();
+$('#qid').textContent = qid;
+
+const fs = k => qf.querySelector(`fieldset[data-k="${k}"]`);
+const val = n => { const el = fs(kind).querySelector(`[name="${n}"]`); return el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.value : parseFloat(el.value); };
+const qtyMult = q => P.qtyBreaks.filter(b => q >= b.min).pop().mult;
+const up = x => x * (1 + P.margin);
+
+function calc(){
+  const q = Math.max(1, Math.round(val('qty') || 1)), warn = [], spec = [];
+  let unit = 0, nre = 0, setup = 0, lead;
+  if (kind === 'panel') {
+    const L = val('pL'), W = val('pW'), T = val('pT'), m = P.panel.materials[val('pMat')], cored = val('pCore') === 'core', f = P.panel.finish[val('pFin')];
+    const a = L * W / 1e6, skinT = cored ? Math.min(T * 0.3, 3) : T;
+    unit = a * skinT * m.perM2mm + (cored ? a * P.panel.cored.perM2 : 0) + a * f.perM2 + 2 * (L + W) / 1000 * P.panel.cutPerM + (val('pHoles') || 0) * P.panel.holePrice;
+    setup = P.panel.setup; lead = P.leadDays.panel;
+    const [mx, my] = P.panel.maxSize;
+    if (Math.max(L, W) > mx || Math.min(L, W) > my) warn.push(`Larger than the standard ${mx} × ${my} mm sheet. Needs a joined or custom-pressed panel; engineering will confirm.`);
+    if (cored && T < 6) warn.push('Cored panels under 6 mm are unusual. Check the thickness.');
+    spec.push(`Flat panel ${L} × ${W} × ${T} mm, ${m.label}, ${cored ? 'sandwich' : 'solid'}, ${f.label}, ${val('pHoles') || 0} holes/cut-outs`);
+  } else if (kind === 'rotor') {
+    const D = val('rD'), B = val('rB'), m = P.rotor.materials[val('rMat')], geo = val('rGeo');
+    unit = (m.base + D * D * m.perIn2) * P.rotor.bladeMult[B] + P.rotor.balance;
+    if (geo === 'new' || geo === 'design') nre = P.rotor.moldNRE.base + D * P.rotor.moldNRE.perIn * (B > 2 ? 1.2 : 1);
+    lead = nre ? P.leadDays.rotorNewMold : P.leadDays.rotor;
+    if (val('rMat') === 'cfnylon' && D > 30) warn.push('Filled-nylon rotors over 30 in are usually too flexible. Carbon is recommended.');
+    if (geo === 'design') warn.push('Rotor design (aero, structure, balance) is quoted as engineering hours after review.');
+    if (val('rPair') && q % 2) warn.push('Odd quantity with CW/CCW pairs. We will round to full pairs.');
+    spec.push(`Rotor ${D} × ${val('rP')} in, ${B}-blade, ${m.label}, ${val('rPair') ? 'CW/CCW pairs' : 'single hand'}, geometry: ${fs('rotor').querySelector('[name=rGeo]').selectedOptions[0].text}`);
+  } else {
+    const L = val('mL'), W = val('mW'), H = val('mH') || 0, n = val('mPly'), m = P.molded.materials[val('mMat')], c = P.molded.complexity[val('mCx')];
+    const a = (L * W + 2 * H * (L + W)) / 1e6;
+    unit = a * n * m.perM2ply + a * P.molded.laborPerM2 * c.labor;
+    if (val('mTool') === 'new') nre = Math.max(P.molded.toolMin, a * P.molded.toolPerM2 * c.tool);
+    lead = nre ? P.leadDays.moldedNewMold : P.leadDays.molded;
+    if (q < 3 && nre) warn.push('With one or two parts, tooling is most of the cost. Ask about a printed or machined one-off mold.');
+    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${a.toFixed(2)} m² surface), ${n} plies, ${m.label}, ${c.label}, ${nre ? 'new mold' : 'customer/existing mold'}`);
+  }
+  const unitP = up(unit) * qtyMult(q), lines = [
+    [`Parts: ${q} × ${usd2(unitP)}`, unitP * q],
+    setup && ['Setup and programming', up(setup)],
+    nre && ['Tooling / mold (one-time)', up(nre)],
+    ['Engineering review and approval', P.engineeringReview],
+  ].filter(Boolean);
+  let total = lines.reduce((s, l) => s + l[1], 0);
+  if (total < P.minOrder) { lines.push(['Minimum order adjustment', P.minOrder - total]); total = P.minOrder; }
+  if (qtyMult(q) < 1) spec.push(`Quantity break applied: ${Math.round((1 - qtyMult(q)) * 100)}% off unit price`);
+  return { q, total, unitP, lines, warn, spec, lead };
+}
+
+let last;
+function render(){
+  last = calc();
+  $('#tot').textContent = usd(last.total);
+  $('#per').textContent = `${usd(last.total / last.q)} per part, all-in · ${last.lead[0]}–${last.lead[1]} working days after approval`;
+  $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Budget total</td><td class="n">${usd(last.total)}</td></tr>`;
+  $('#warn').innerHTML = last.warn.map(w => `<div>${w}</div>`).join('');
+}
+
+function setKind(k){
+  kind = k;
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.k === k));
+  qf.querySelectorAll('fieldset').forEach(f => f.hidden = f.dataset.k !== k);
+  try { localStorage.setItem('wb-kind', k); } catch(e) {}
+  render();
+}
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setKind(b.dataset.k));
+qf.addEventListener('input', render);
+
+function summary(){
+  const s = $('#sf').elements;
+  return [
+    `Wyspa Build quote request ${qid}`, '',
+    ...last.spec, `Quantity: ${last.q}`, '',
+    ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
+    `Budget total: ${usd(last.total)} (budget estimate, not binding)`,
+    `Lead time: ${last.lead[0]}-${last.lead[1]} working days after approval`,
+    ...(last.warn.length ? ['', 'Notes:', ...last.warn.map(w => '- ' + w)] : []), '',
+    `Name: ${s.name.value}`, `Company: ${s.org.value}`, `Email: ${s.email.value}`, `Need by: ${s.need.value || 'flexible'}`,
+    `Application and loads: ${s.notes.value}`, '', '[Attach CAD / drawings / sketch]'
+  ].join('\n');
+}
+$('#go').onclick = () => {
+  const sf = $('#sf');
+  if (!sf.reportValidity()) return;
+  location.href = `mailto:casey@wyspa.tech?subject=${encodeURIComponent('Quote request ' + qid)}&body=${encodeURIComponent(summary())}`;
+  $('#msg').textContent = `Your email app should open now. If it doesn't, use Copy summary and email it to casey@wyspa.tech, quoting ${qid}.`;
+};
+$('#cp').onclick = async () => {
+  try { await navigator.clipboard.writeText(summary()); $('#msg').textContent = 'Summary copied.'; }
+  catch(e) { $('#msg').textContent = 'Copy failed. Select the estimate and copy manually.'; }
+};
+setKind(kind);
+})();
+</script>
+</body>
+</html>
