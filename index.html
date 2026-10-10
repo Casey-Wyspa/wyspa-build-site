@@ -244,8 +244,9 @@ const P = window.WYSPA_PRICING, $ = s => document.querySelector(s), qf = $('#qf'
 const usd = n => '$' + Math.round(n).toLocaleString('en-US');
 const usd2 = n => '$' + n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const fill = (sel, obj) => { sel.innerHTML = Object.entries(obj).map(([k,v]) => `<option value="${k}">${v.label}</option>`).join(''); };
-fill(qf.elements.pMat, P.panel.materials); fill(qf.elements.pFin, P.panel.finish);
-fill(qf.elements.rMat, P.rotor.materials); fill(qf.elements.mMat, P.molded.materials); fill(qf.elements.mCx, P.molded.complexity);
+const pick = keys => Object.fromEntries(keys.map(k => [k, P.plies[k]]));
+fill(qf.elements.pMat, pick(P.panel.materials)); fill(qf.elements.pFin, P.panel.finish);
+fill(qf.elements.rMat, pick(P.rotor.materials)); fill(qf.elements.mMat, pick(P.molded.materials)); fill(qf.elements.mCx, P.molded.complexity);
 
 let kind = 'panel';
 try { const k = localStorage.getItem('wb-kind'); if (k && P[k]) kind = k; } catch(e) {}
@@ -255,47 +256,50 @@ $('#qid').textContent = qid;
 const fs = k => qf.querySelector(`fieldset[data-k="${k}"]`);
 const val = n => { const el = fs(kind).querySelector(`[name="${n}"]`); return el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.value : parseFloat(el.value); };
 const qtyMult = q => P.qtyBreaks.filter(b => q >= b.min).pop().mult;
-const up = x => x * (1 + P.margin);
+// Pricing method: labor hours x rate + materials x materialMult
+const price = (hours, mat) => hours * P.rate + mat * P.materialMult;
 
 function calc(){
-  const q = Math.max(1, Math.round(val('qty') || 1)), warn = [], spec = [];
-  let unit = 0, nre = 0, setup = 0, lead;
+  const q = Math.max(1, Math.round(val('qty') || 1)), warn = [], spec = [], lm = qtyMult(q);
+  let hr = 0, mat = 0, nre = 0, setup = 0, lead;
   if (kind === 'panel') {
-    const L = val('pL'), W = val('pW'), T = val('pT'), m = P.panel.materials[val('pMat')], cored = val('pCore') === 'core', f = P.panel.finish[val('pFin')];
-    const a = L * W / 1e6, skinT = cored ? Math.min(T * 0.3, 3) : T;
-    unit = a * skinT * m.perM2mm + (cored ? a * P.panel.cored.perM2 : 0) + a * f.perM2 + 2 * (L + W) / 1000 * P.panel.cutPerM + (val('pHoles') || 0) * P.panel.holePrice;
-    setup = P.panel.setup; lead = P.leadDays.panel;
-    const [mx, my] = P.panel.maxSize;
+    const L = val('pL'), W = val('pW'), T = val('pT'), m = P.plies[val('pMat')], cored = val('pCore') === 'core', f = P.panel.finish[val('pFin')], C = P.panel;
+    const a = L * W / 1e6, n = Math.ceil((cored ? Math.min(T * 0.3, 3) : T) / m.t);
+    mat = a * (n * m.perM2 + P.consumablesPerM2 + f.perM2 + (cored ? C.core.perM2 : 0));
+    hr = a * (n * C.hrPerM2Ply + f.hrPerM2 + (cored ? C.core.hrPerM2 : 0)) + C.hrPerPart + 2 * (L + W) / 1000 * C.hrPerMCut + (val('pHoles') || 0) * C.hrPerHole;
+    setup = price(C.setupHours, 0); lead = P.leadDays.panel;
+    const [mx, my] = C.maxSize;
     if (Math.max(L, W) > mx || Math.min(L, W) > my) warn.push(`Larger than the standard ${mx} × ${my} mm sheet. Needs a joined or custom-pressed panel; engineering will confirm.`);
     if (cored && T < 6) warn.push('Cored panels under 6 mm are unusual. Check the thickness.');
-    spec.push(`Flat panel ${L} × ${W} × ${T} mm, ${m.label}, ${cored ? 'sandwich' : 'solid'}, ${f.label}, ${val('pHoles') || 0} holes/cut-outs`);
+    spec.push(`Flat panel ${L} × ${W} × ${T} mm, ${m.label}, ${cored ? 'sandwich' : 'solid'} (~${n} plies), ${f.label}, ${val('pHoles') || 0} holes/cut-outs`);
   } else if (kind === 'rotor') {
-    const D = val('rD'), B = val('rB'), m = P.rotor.materials[val('rMat')], geo = val('rGeo');
-    unit = (m.base + D * D * m.perIn2) * P.rotor.bladeMult[B] + P.rotor.balance;
-    if (geo === 'new' || geo === 'design') nre = P.rotor.moldNRE.base + D * P.rotor.moldNRE.perIn * (B > 2 ? 1.2 : 1);
+    const D = val('rD'), B = val('rB'), m = P.plies[val('rMat')], geo = val('rGeo'), R = P.rotor, bm = R.bladeMult[B];
+    mat = (R.matBase + D * D * R.matPerIn2) * bm * m.perM2 / P.plies.carbon.perM2;
+    hr = (R.hrBase + D * R.hrPerIn) * bm + R.balanceHours;
+    if (geo === 'new' || geo === 'design') nre = price((R.mold.hrBase + D * R.mold.hrPerIn) * (B > 2 ? 1.2 : 1), R.mold.matBase + D * R.mold.matPerIn);
     lead = nre ? P.leadDays.rotorNewMold : P.leadDays.rotor;
-    if (val('rMat') === 'cfnylon' && D > 30) warn.push('Filled-nylon rotors over 30 in are usually too flexible. Carbon is recommended.');
     if (geo === 'design') warn.push('Rotor design (aero, structure, balance) is quoted as engineering hours after review.');
     if (val('rPair') && q % 2) warn.push('Odd quantity with CW/CCW pairs. We will round to full pairs.');
     spec.push(`Rotor ${D} × ${val('rP')} in, ${B}-blade, ${m.label}, ${val('rPair') ? 'CW/CCW pairs' : 'single hand'}, geometry: ${fs('rotor').querySelector('[name=rGeo]').selectedOptions[0].text}`);
   } else {
-    const L = val('mL'), W = val('mW'), H = val('mH') || 0, n = val('mPly'), m = P.molded.materials[val('mMat')], c = P.molded.complexity[val('mCx')];
+    const L = val('mL'), W = val('mW'), H = val('mH') || 0, n = val('mPly'), m = P.plies[val('mMat')], c = P.molded.complexity[val('mCx')], M = P.molded;
     const a = (L * W + 2 * H * (L + W)) / 1e6;
-    unit = a * n * m.perM2ply + a * P.molded.laborPerM2 * c.labor;
-    if (val('mTool') === 'new') nre = Math.max(P.molded.toolMin, a * P.molded.toolPerM2 * c.tool);
+    mat = a * (n * m.perM2 + P.consumablesPerM2);
+    hr = M.hrPerPart + M.trimHours + a * (M.hrPerM2 + n * M.hrPerM2Ply) * c.labor;
+    if (val('mTool') === 'new') nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) * c.tool, a * M.tool.matPerM2 * c.tool);
     lead = nre ? P.leadDays.moldedNewMold : P.leadDays.molded;
     if (q < 3 && nre) warn.push('With one or two parts, tooling is most of the cost. Ask about a printed or machined one-off mold.');
     spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${a.toFixed(2)} m² surface), ${n} plies, ${m.label}, ${c.label}, ${nre ? 'new mold' : 'customer/existing mold'}`);
   }
-  const unitP = up(unit) * qtyMult(q), lines = [
+  const unitP = price(hr * lm, mat), lines = [
     [`Parts: ${q} × ${usd2(unitP)}`, unitP * q],
-    setup && ['Setup and programming', up(setup)],
-    nre && ['Tooling / mold (one-time)', up(nre)],
-    ['Engineering review and approval', P.engineeringReview],
+    setup && ['Setup and programming', setup],
+    nre && ['Tooling / mold (one-time)', nre],
+    ['Engineering review and approval', price(P.reviewHours, 0)],
   ].filter(Boolean);
   let total = lines.reduce((s, l) => s + l[1], 0);
   if (total < P.minOrder) { lines.push(['Minimum order adjustment', P.minOrder - total]); total = P.minOrder; }
-  if (qtyMult(q) < 1) spec.push(`Quantity break applied: ${Math.round((1 - qtyMult(q)) * 100)}% off unit price`);
+  if (lm < 1) spec.push(`Volume discount applied to labor: ${Math.round((1 - lm) * 100)}%`);
   return { q, total, unitP, lines, warn, spec, lead };
 }
 

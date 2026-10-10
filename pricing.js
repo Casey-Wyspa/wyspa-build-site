@@ -1,68 +1,71 @@
 // Wyspa Build: pricing model for instant budgetary quotes.
-// Every number here is a PLACEHOLDER until Casey and partner builders confirm rates.
+// Method (set by Casey 2026-10-10): price = labor hours x $169/hr + materials x 2.
+// Hours and material costs are deliberately conservative (rounded up) estimates.
 // Edit this file only; index.html reads everything from WYSPA_PRICING.
 window.WYSPA_PRICING = {
   currency: "USD",
-  margin: 0.25,               // applied on top of builder cost
-  engineeringReview: 250,     // flat fee per order: Wyspa checks laminate, drawings, manufacturability
-  minOrder: 150,              // floor on the order total
+  rate: 169,                  // $/hr, shop + engineering labor
+  materialMult: 2,            // materials and consumables billed at 2x cost
+  reviewHours: 2,             // per order: Wyspa engineering review and approval
+  minOrder: 350,              // floor on the order total
 
-  // Quantity breaks on unit price (qty >= min → multiplier)
+  // Learning curve: multiplier on LABOR hours only (materials don't get cheaper)
   qtyBreaks: [
     { min: 1, mult: 1.00 },
-    { min: 10, mult: 0.90 },
-    { min: 50, mult: 0.80 },
-    { min: 250, mult: 0.70 },
+    { min: 10, mult: 0.92 },
+    { min: 50, mult: 0.85 },
+    { min: 250, mult: 0.80 },
   ],
 
-  // Flat panels: material + layup cost per m² per mm of thickness, plus CNC cutting
+  // Raw material cost per m² per ply (fabric + resin), with ply thickness in mm
+  plies: {
+    carbon:  { label: "Carbon fiber (wet / vacuum)", perM2: 55, t: 0.25 },
+    prepreg: { label: "Carbon prepreg (oven cure)",  perM2: 95, t: 0.25 },
+    glass:   { label: "Fiberglass (E-glass)",        perM2: 18, t: 0.25 },
+    hybrid:  { label: "Carbon/glass hybrid",         perM2: 38, t: 0.25 },
+  },
+  consumablesPerM2: 20,       // peel ply, bag, breather, release, per m² of part per cure
+
+  // Flat panels: laid up flat, cured, CNC cut
   panel: {
-    materials: {
-      carbon: { label: "Carbon fiber (twill/UD)", perM2mm: 210 },
-      glass:  { label: "Fiberglass (E-glass)",   perM2mm: 70 },
-      hybrid: { label: "Carbon/glass hybrid",    perM2mm: 140 },
-    },
-    cored: { label: "Foam/honeycomb core", perM2: 120 },   // added when sandwich
+    materials: ["carbon", "prepreg", "glass", "hybrid"],
+    core: { label: "Foam/honeycomb core", perM2: 70, hrPerM2: 0.4 },
     finish: {
-      matte:  { label: "Peel-ply / matte", perM2: 0 },
-      gloss:  { label: "Gloss one side",   perM2: 60 },
-      clear:  { label: "Clear-coat UV",    perM2: 110 },
+      matte: { label: "Peel-ply / matte", perM2: 0,  hrPerM2: 0 },
+      gloss: { label: "Gloss one side",   perM2: 15, hrPerM2: 0.6 },
+      clear: { label: "Clear-coat UV",    perM2: 30, hrPerM2: 1.2 },
     },
-    cutPerM: 6,               // CNC routing per meter of perimeter
-    holePrice: 0.6,           // per drilled/routed hole or cut-out
-    setup: 120,               // per order: program + fixture
+    hrPerM2Ply: 0.08,         // layup per m² per ply
+    hrPerPart: 0.2,           // demold, inspect, handle
+    hrPerMCut: 0.06,          // CNC routing per meter of perimeter
+    hrPerHole: 0.02,
+    setupHours: 1.5,          // per order: CNC program + fixture
     maxSize: [2400, 1200],    // mm, largest sheet partner builders press
   },
 
-  // Rotors / propellers: unit cost grows with disc area; custom molds are NRE
+  // Rotors / propellers: molded in a matched metal mold
   rotor: {
-    materials: {
-      carbon:  { label: "Carbon fiber",              base: 18, perIn2: 0.08 },
-      cfnylon: { label: "Carbon-filled nylon (molded)", base: 6,  perIn2: 0.025 },
-    },
-    bladeMult: { 2: 1.0, 3: 1.35, 4: 1.7 },
-    balance: 8,               // per rotor: dynamic balancing + inspection
-    moldNRE: { base: 1800, perIn: 120 },  // custom geometry tooling, per diameter inch
+    materials: ["carbon", "prepreg"],
+    matBase: 4, matPerIn2: 0.035,          // raw material $ = base + k * D² (D in inches)
+    hrBase: 1.0, hrPerIn: 0.04,            // layup, press, demold, trim per rotor
+    bladeMult: { 2: 1.0, 3: 1.4, 4: 1.8 },
+    balanceHours: 0.25,                    // dynamic balance + inspection, per rotor
+    mold: { hrBase: 12, hrPerIn: 1.0, matBase: 100, matPerIn: 8 },  // CNC aluminum mold
   },
 
   // Molded parts: priced from envelope surface area, ply count and complexity
   molded: {
-    materials: {
-      carbon: { label: "Carbon fiber (wet/vac)",   perM2ply: 95 },
-      prepreg: { label: "Carbon prepreg (oven)",   perM2ply: 160 },
-      glass:  { label: "Fiberglass",              perM2ply: 35 },
-    },
+    materials: ["carbon", "prepreg", "glass", "hybrid"],
     complexity: {
-      simple:  { label: "Simple: open, shallow, no undercuts", labor: 1.0, tool: 1.0 },
-      medium:  { label: "Medium: curved, flanges, inserts",    labor: 1.6, tool: 1.7 },
+      simple:  { label: "Simple: open, shallow, no undercuts",   labor: 1.0, tool: 1.0 },
+      medium:  { label: "Medium: curved, flanges, inserts",      labor: 1.6, tool: 1.7 },
       complex: { label: "Complex: closed/split mold, undercuts", labor: 2.6, tool: 2.8 },
     },
-    laborPerM2: 260,          // layup, bagging, trim per m² of part surface
-    toolPerM2: 2200,          // plug + mold NRE per m² of part surface
-    toolMin: 900,
-    customerTooling: 0.0,     // multiplier on tooling when customer supplies the mold
+    hrPerPart: 1.0, trimHours: 0.5,        // prep/demold and trim per part
+    hrPerM2: 0.5, hrPerM2Ply: 0.12,        // layup per m² of surface, plus per ply
+    tool: { hrMin: 16, hrPerM2: 30, matPerM2: 250 },  // plug + mold
   },
 
   // Lead time in working days by order type (before any shipping)
-  leadDays: { panel: [7, 12], rotor: [10, 15], rotorNewMold: [20, 30], molded: [15, 25], moldedNewMold: [30, 45] },
+  leadDays: { panel: [10, 15], rotor: [15, 20], rotorNewMold: [25, 35], molded: [20, 30], moldedNewMold: [35, 50] },
 };
