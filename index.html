@@ -81,9 +81,12 @@ html,body{margin:0;background:#eef2f3}
 .wb .pp b{color:var(--ink);font-weight:600}
 .wb .ct{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-top:24px}
 .wb .ct .v{font:500 18px var(--m);color:var(--ink)}
+.wb .bar{display:none}
 @media (max-width:820px){
  .wb .hero,.wb .two,.wb .sh,.wb .qt{grid-template-columns:minmax(0,1fr)}
  .wb .est{position:static}
+ .wb .bar.on{display:flex;justify-content:space-between;align-items:center;gap:12px;position:fixed;left:0;right:0;bottom:0;z-index:5;padding:12px 16px;background:var(--ink);color:var(--paper);text-decoration:none;font:800 22px/1 var(--d);font-stretch:125%}
+ .wb .bar .lb{color:var(--rule)}
 }
 @media (max-width:520px){
  .wb form fieldset,.wb .steps{grid-template-columns:minmax(0,1fr)}
@@ -91,7 +94,7 @@ html,body{margin:0;background:#eef2f3}
  .wb .tabs button{padding:12px 8px;border-bottom:1px solid var(--rule)}
 }
 @media print{
- .wb .hero,.wb #how,.wb #builders,.wb .tabs,.wb .send,.wb .top{display:none}
+ .wb .hero,.wb #how,.wb #builders,.wb .tabs,.wb .send,.wb .top,.wb .bar{display:none}
  .wb .qt{grid-template-columns:1fr 1fr}
 }
 </style>
@@ -142,7 +145,7 @@ html,body{margin:0;background:#eef2f3}
 <section id="quote">
  <div class="sh"><div class="lb">Price</div><div><h2>Get a price</h2><p>An estimate now. A firm quote after an engineer checks your part.</p></div></div>
 
- <div class="drop" id="drop"><input type="file" id="cad" accept=".dxf,.step,.stp,.iges,.igs,.stl,.3dm" hidden><label for="cad" class="btn pr">Upload a file</label><span>Drop a DXF, STEP, STL or Rhino file for an instant price, or fill in the fields.</span></div>
+ <div class="drop" id="drop"><input type="file" id="cad" accept=".dxf,.step,.stp,.iges,.igs,.stl,.3dm,.sldprt" hidden><label for="cad" class="btn pr">Upload a file</label><span>Drop a DXF, STEP, STL or Rhino file for an instant price, or fill in the fields.</span></div>
  <p class="note" id="cadmsg"></p>
  <div class="tabs" role="tablist">
   <button type="button" role="tab" aria-selected="true" data-k="panel">Flat panel</button>
@@ -156,34 +159,32 @@ html,body{margin:0;background:#eef2f3}
    <fieldset data-k="panel">
     <label>Length (mm)<input type="number" name="pL" value="600" min="10" step="1"></label>
     <label>Width (mm)<input type="number" name="pW" value="400" min="10" step="1"></label>
-    <label>Total thickness (mm)<input type="number" name="pT" value="2" min="0.3" max="50" step="0.1"></label>
+    <label>Thickness (mm)<input type="number" name="pT" value="2" min="0.3" max="50" step="0.1"></label>
     <label>Material<select name="pMat"></select></label>
-    <label>Core<select name="pCore"><option value="solid">None (solid)</option><option value="core">Foam core</option></select></label>
-    <label id="pSkinL" hidden><span>Skin, each side (mm) <span id="pSkinHint"></span></span><input type="number" name="pSkin" value="1" min="0.1" max="10" step="0.1"></label>
+    <label>Foam core<select name="pCore"><option value="solid">No, solid</option><option value="core">Yes, foam in the middle</option></select></label>
+    <label id="pSkinL" hidden>Outer layers, each side (mm)<input type="number" name="pSkin" value="1" min="0.1" max="10" step="0.1"></label>
     <label>Finish<select name="pFin"></select></label>
     <label>Holes per panel<input type="number" name="pHoles" value="4" min="0" step="1"></label>
     <label>Quantity<input type="number" name="qty" value="10" min="1" step="1"></label>
    </fieldset>
    <fieldset data-k="rotor" hidden>
     <label>Diameter (in)<input type="number" name="rD" value="15" min="3" max="80" step="0.5"></label>
-    <label>Pitch (in)<input type="number" name="rP" value="5" min="1" max="40" step="0.1"></label>
     <label>Blades<select name="rB"><option>2</option><option>3</option><option>4</option></select></label>
     <label>Material<select name="rMat"></select></label>
-    <label class="full">Mold<select name="rGeo">
-     <option value="new">New mold from my CAD</option>
-     <option value="repeat">Repeat order (we have the mold)</option>
+    <label>Mold<select name="rGeo">
+     <option value="new">Make a new mold</option>
+     <option value="repeat">Repeat order (you have my mold)</option>
      <option value="design">Design the rotor for me</option>
     </select></label>
-    <label class="chk full"><input type="checkbox" name="rPair" checked> In CW / CCW pairs</label>
     <label>Quantity<input type="number" name="qty" value="8" min="1" step="1"></label>
    </fieldset>
    <fieldset data-k="molded" hidden>
     <label>Length (mm)<input type="number" name="mL" value="500" min="10" step="1"></label>
     <label>Width (mm)<input type="number" name="mW" value="300" min="10" step="1"></label>
     <label>Depth (mm)<input type="number" name="mH" value="80" min="0" step="1"></label>
-    <label>Layers<input type="number" name="mPly" value="4" min="1" max="40" step="1"></label>
+    <label>Wall thickness (mm)<input type="number" name="mWall" value="1" min="0.2" max="20" step="0.1"></label>
     <label>Material<select name="mMat"></select></label>
-    <label>Mold<select name="mTool"><option value="new">New mold</option><option value="have">Repeat order (we have the mold)</option></select></label>
+    <label>Mold<select name="mTool"><option value="new">Make a new mold</option><option value="have">Repeat order (you have my mold)</option></select></label>
     <label class="full">Shape<select name="mCx"></select></label>
     <label>Quantity<input type="number" name="qty" value="5" min="1" step="1"></label>
    </fieldset>
@@ -194,7 +195,8 @@ html,body{margin:0;background:#eef2f3}
    </fieldset>
   </form>
 
-  <aside class="est" aria-live="polite">
+  <a class="bar" id="bar" href="#est" aria-hidden="true" tabindex="-1"><span class="lb" id="barlb">Estimate</span><span id="bartot"></span></a>
+  <aside class="est" id="est" aria-live="polite">
    <div class="lb"><span id="estlb">Estimate</span> · <span id="qid"></span></div>
    <div class="tot" id="tot">$0</div>
    <div class="note" style="margin-top:0" id="per"></div>
@@ -277,10 +279,10 @@ function calc(){
     const [mx, my] = C.maxSize;
     if (Math.max(L, W) > mx || Math.min(L, W) > my) review.push(`Larger than the ${mx} × ${my} mm standard sheet`);
     if (T > X.panelMaxT) review.push(`Thicker than ${X.panelMaxT} mm`);
-    if (cored && coreT < C.core.minT) review.push(`Core under ${C.core.minT} mm. Check total and skin thickness`);
+    if (cored && coreT < C.core.minT) review.push(`Foam core under ${C.core.minT} mm. Check thickness and outer layers.`);
     if (!cored && T > X.panelMaxSolidT) review.push(`Solid laminate thicker than ${X.panelMaxSolidT} mm`);
-    if (cored && skin < X.minSkin) review.push(`Skins under ${X.minSkin} mm`);
-    if (cored && coreT > X.maxCoreToSkin * skin) review.push('Thin skins on a thick core');
+    if (cored && skin < X.minSkin) review.push(`Outer layers under ${X.minSkin} mm`);
+    if (cored && coreT > X.maxCoreToSkin * skin) review.push('Thin outer layers on a thick core');
     spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins (about ${Math.round(skin * m.gsmPerMm)} gsm each) on ${+coreT.toFixed(1)} mm foam core` : `solid (about ${Math.round(T * m.gsmPerMm)} gsm)`}, ${f.label}, ${val('pHoles') || 0} holes, ${cutM.toFixed(1)} m of cutting`);
   } else if (kind === 'rotor') {
     const D = val('rD'), B = val('rB'), m = P.plies[val('rMat')], geo = val('rGeo'), R = P.rotor, bm = R.bladeMult[B];
@@ -291,10 +293,11 @@ function calc(){
     if (geo === 'design') review.push('Rotor design by Wyspa');
     if (D > X.rotorMaxD) review.push(`Diameter over ${X.rotorMaxD} in`);
     if (B > X.rotorMaxBlades) review.push(`More than ${X.rotorMaxBlades} blades`);
-    if (val('rPair') && q % 2) warn.push('Odd quantity with CW/CCW pairs. We will round to full pairs.');
-    spec.push(`Rotor ${D} × ${val('rP')} in, ${B}-blade, ${m.label}, ${val('rPair') ? 'CW/CCW pairs' : 'single hand'}, geometry: ${fs('rotor').querySelector('[name=rGeo]').selectedOptions[0].text}`);
+    spec.push(`Rotor ${D} in diameter, ${B}-blade, ${m.label}, mold: ${fs('rotor').querySelector('[name=rGeo]').selectedOptions[0].text}`);
   } else if (kind === 'molded') {
-    const L = val('mL'), W = val('mW'), H = val('mH') || 0, n = val('mPly'), m = P.plies[val('mMat')], c = P.molded.complexity[val('mCx')], M = P.molded;
+    const L = val('mL'), W = val('mW'), H = val('mH') || 0, m = P.plies[val('mMat')], c = P.molded.complexity[val('mCx')], M = P.molded;
+    // Wall thickness in mm -> whole plies of the chosen fabric, rounded up
+    const wall = val('mWall') || 1, n = Math.max(1, Math.ceil(wall / m.t - 1e-9));
     const a = (L * W + 2 * H * (L + W)) / 1e6;
     mat = a * (n * m.perM2 + P.consumablesPerM2);
     hr = M.hrPerPart + M.trimHours + a * (M.hrPerM2 + n * M.hrPerM2Ply) * c.labor;
@@ -304,8 +307,8 @@ function calc(){
     if (val('mCx') === 'complex') review.push('Closed or split mold, undercuts');
     if (Math.max(L, W) > X.moldedMaxDim) review.push(`Longer than ${X.moldedMaxDim} mm`);
     if (H > X.moldedMaxDepth) review.push(`Deeper than ${X.moldedMaxDepth} mm`);
-    if (n > X.maxPlies) review.push(`More than ${X.maxPlies} plies`);
-    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${a.toFixed(2)} m² surface), ${n} plies, ${m.label}, ${c.label}, ${nre ? 'new mold' : 'repeat order, our existing mold'}`);
+    if (n > X.maxPlies) review.push(`Wall thicker than ${+(X.maxPlies * m.t).toFixed(1)} mm`);
+    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${a.toFixed(2)} m² surface), ${wall} mm wall (${n} plies), ${m.label}, ${c.label}, ${nre ? 'new mold' : 'repeat order, our existing mold'}`);
   } else {
     const txt = n => fs('assembly').querySelector(`[name="${n}"]`).value.trim();
     review.push('Assembly');
@@ -350,7 +353,7 @@ function applyFile(g, file) {
   } else {
     setKind('molded');
     put('mL', r(g.L)); put('mW', r(g.W)); put('mH', r(g.H)); put('mTool', 'new');
-    put('mPly', Math.min(40, Math.max(1, Math.ceil((g.wall || 1) / P.plies[val('mMat')].t))));
+    put('mWall', Math.max(0.2, Math.ceil((g.wall || 1) * 10 - 1e-9) / 10));
     put('mCx', g.complex ? 'complex' : 'medium');
     what = `${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm${g.wall ? `, about ${g.wall.toFixed(1)} mm wall` : ''}`;
   }
@@ -360,10 +363,15 @@ function applyFile(g, file) {
 window.WB = { applyFile };
 
 let last;
-function render(){
-  const pf = fs('panel'), cored = pf.querySelector('[name=pCore]').value === 'core';
-  $('#pSkinL').hidden = !cored;
-  $('#pSkinHint').textContent = `≈ ${Math.round((parseFloat(pf.querySelector('[name=pSkin]').value) || 0) * (P.plies[pf.querySelector('[name=pMat]').value] || P.plies.carbon).gsmPerMm).toLocaleString('en-US')} gsm`;
+// Phones: a bar pinned to the bottom shows the total while the form is on screen and the price box isn't.
+function render(){ draw(); $('#barlb').textContent = $('#estlb').textContent; $('#bartot').textContent = $('#tot').textContent; }
+const seen = new Map(), io = new IntersectionObserver(es => {
+  es.forEach(e => seen.set(e.target, e.isIntersecting));
+  $('#bar').classList.toggle('on', !!seen.get(qf) && !seen.get($('#est')));
+});
+io.observe(qf); io.observe($('#est'));
+function draw(){
+  $('#pSkinL').hidden = fs('panel').querySelector('[name=pCore]').value !== 'core';
   last = calc();
   if (last.manual) {
     $('#estlb').textContent = 'Quote'; $('#tot').textContent = 'Engineer quote'; $('#tot').style.fontSize = 'clamp(30px,4vw,40px)';
@@ -385,6 +393,9 @@ function render(){
 }
 
 function setKind(k){
+  // Keep a quantity the buyer typed when the tab changes (by click or by an uploaded file).
+  const q0 = kind && fs(kind) && fs(kind).querySelector('[name=qty]'), q1 = fs(k).querySelector('[name=qty]');
+  if (q0 && q0 !== q1 && q0.value !== q0.defaultValue) q1.value = q0.value;
   kind = k;
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.k === k));
   qf.querySelectorAll('fieldset').forEach(f => f.hidden = f.dataset.k !== k);

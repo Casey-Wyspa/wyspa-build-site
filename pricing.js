@@ -24,7 +24,7 @@ window.WYSPA_PRICING = {
   plies: {
     carbon:  { label: "Carbon fiber",   gsm: 200, t: 0.22, gsmPerMm: 900,  perM2: 65,       // 3K 2x2 twill
                bulk: { gsm: 670, t: 0.75, perM2mm: 155 } },   // heavy 12K twill for the inside of thick laminates, $ per m² per mm
-    prepreg: { label: "Carbon prepreg", gsm: 200, t: 0.20, gsmPerMm: 1000, perM2: 169 },    // 3K twill prepreg, $163.86/yd list
+    prepreg: { label: "Carbon (prepreg)", gsm: 200, t: 0.20, gsmPerMm: 1000, perM2: 169 },    // 3K twill prepreg, $163.86/yd list
     glass:   { label: "Fiberglass",     gsm: 300, t: 0.26, gsmPerMm: 1140, perM2: 26 },     // 7781 E-glass
     hybrid:  { label: "Carbon + glass", gsm: 250, t: 0.24, gsmPerMm: 1040, perM2: 46 },     // average of one carbon + one 7781 ply
   },
