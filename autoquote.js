@@ -21,6 +21,8 @@
         say(`We can't read .${ext} files here. Export a STEP or DXF and drop that in, or fill in the fields. Your file will still be sent with the request.`);
         return window.WB.applyFile(null, file);
       }
+      // Garbage files can give NaN, zero or absurd sizes: treat those as unreadable.
+      if (![geo.L, geo.W, geo.H ?? 1].every(v => isFinite(v) && v > 0 && v < 1e5)) throw new Error('bad size');
       window.WB.applyFile(geo, file);
     } catch (e) {
       say(`Couldn't read ${file.name}. Fill in the fields below; your file will still be sent with the request.`);
@@ -35,7 +37,8 @@
     for (let i = 0; i + 1 < ln.length; i += 2) pairs.push([parseInt(ln[i], 10), ln[i + 1].trim()]);
     let scale = 1, i = 0;
     const ui = pairs.findIndex(p => p[0] === 9 && p[1] === '$INSUNITS');
-    if (ui >= 0) scale = { 1: 25.4, 2: 304.8, 4: 1, 5: 10, 6: 1000 }[parseInt(pairs[ui + 1][1], 10)] || 1;
+    const uc = ui >= 0 ? parseInt(pairs[ui + 1][1], 10) : 0;
+    if (uc) scale = { 1: 25.4, 2: 304.8, 4: 1, 5: 10, 6: 1000 }[uc] || 1;
     while (i < pairs.length && !(pairs[i][0] === 2 && pairs[i][1] === 'ENTITIES')) i++;
     const ents = [];
     let cur = null;
@@ -64,20 +67,31 @@
       } else if (e.type !== 'VERTEX' && e.type !== 'SEQEND') flat.push(e);
     }
     let len = 0, closed = 0, circles = 0;
+    const segs = [];   // open pieces (LINE, ARC, open polylines) to chain into loops
     const bb = [Infinity, Infinity, -Infinity, -Infinity];
     const pt = (x, y) => { bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], y); bb[2] = Math.max(bb[2], x); bb[3] = Math.max(bb[3], y); };
     const arcPts = (cx, cy, r, a0, a1) => { let s = a1 - a0; if (s <= 0) s += 360; for (let t = 0; t <= 16; t++) { const a = (a0 + s * t / 16) * Math.PI / 180; pt(cx + r * Math.cos(a), cy + r * Math.sin(a)); } return r * s * Math.PI / 180; };
     for (const e of flat) {
-      if (e.type === 'LINE' && e.x.length) { pt(e.x[0], e.y[0]); pt(e.x2, e.y2); len += Math.hypot(e.x2 - e.x[0], e.y2 - e.y[0]); }
+      if (e.type === 'LINE' && e.x.length) { pt(e.x[0], e.y[0]); pt(e.x2, e.y2); len += Math.hypot(e.x2 - e.x[0], e.y2 - e.y[0]); segs.push([e.x[0], e.y[0], e.x2, e.y2]); }
       else if (e.type === 'CIRCLE') { circles++; len += arcPts(e.x[0], e.y[0], e.r, 0, 360); }
-      else if (e.type === 'ARC') len += arcPts(e.x[0], e.y[0], e.r, e.a0, e.a1);
+      else if (e.type === 'ARC') {
+        len += arcPts(e.x[0], e.y[0], e.r, e.a0 || 0, e.a1 || 0);
+        const r = e.r, a0 = (e.a0 || 0) * Math.PI / 180, a1 = (e.a1 || 0) * Math.PI / 180;
+        segs.push([e.x[0] + r * Math.cos(a0), e.y[0] + r * Math.sin(a0), e.x[0] + r * Math.cos(a1), e.y[0] + r * Math.sin(a1)]);
+      }
       else if (e.type === 'LWPOLYLINE' && e.x.length > 1) {
         const isClosed = (e.flags & 1) === 1, n = e.x.length;
-        if (isClosed) closed++;
+        if (isClosed) closed++; else segs.push([e.x[0], e.y[0], e.x[n - 1], e.y[n - 1]]);
         for (let k = 0; k < (isClosed ? n : n - 1); k++) {
           const j = (k + 1) % n, d = Math.hypot(e.x[j] - e.x[k], e.y[j] - e.y[k]), bu = e.b[k] || 0;
           pt(e.x[k], e.y[k]);
-          len += bu ? d * (Math.atan(bu) * 4) / (2 * Math.sin(Math.atan(bu) * 2)) : d;   // arc length for bulged segments
+          if (bu && d) {   // bulged segment = arc: add its length and its extent
+            const th = 4 * Math.atan(bu), h = d * (1 - bu * bu) / (4 * bu);
+            const cx = (e.x[k] + e.x[j]) / 2 - (e.y[j] - e.y[k]) / d * h, cy = (e.y[k] + e.y[j]) / 2 + (e.x[j] - e.x[k]) / d * h;
+            const r = Math.hypot(e.x[k] - cx, e.y[k] - cy), s = Math.atan2(e.y[k] - cy, e.x[k] - cx);
+            for (let t = 1; t < 32; t++) pt(cx + r * Math.cos(s + th * t / 32), cy + r * Math.sin(s + th * t / 32));
+            len += r * Math.abs(th);
+          } else len += d;
         }
         pt(e.x[n - 1], e.y[n - 1]);
       } else if ((e.type === 'SPLINE' || e.type === 'ELLIPSE') && e.x.length) {
@@ -87,8 +101,22 @@
       }
     }
     if (!isFinite(bb[0])) throw new Error('no geometry');
-    const L = (bb[2] - bb[0]) * scale, W = (bb[3] - bb[1]) * scale;
-    return { kind: 'panel', L, W, cutM: len * scale / 1000, holes: Math.max(0, circles + closed - 1), units: scale === 1 && ui < 0 ? 'assumed mm' : 'units from file' };
+    // Chain loose pieces (LINE/ARC exports from Fusion, SolidWorks) into closed loops: a group of
+    // pieces whose ends all meet another end is one loop (outline or cutout).
+    const tol = Math.max(1e-6, 1e-4 * Math.hypot(bb[2] - bb[0], bb[3] - bb[1])), nodes = new Map(), par = [], deg = [];
+    const find = a => { while (par[a] !== a) a = par[a] = par[par[a]]; return a; };
+    const node = (x, y) => {
+      const gx = Math.round(x / tol), gy = Math.round(y / tol);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) { const id = nodes.get((gx + dx) + ',' + (gy + dy)); if (id != null) return id; }
+      const id = par.length; par.push(id); deg.push(0); nodes.set(gx + ',' + gy, id); return id;
+    };
+    for (const [x1, y1, x2, y2] of segs) { const a = node(x1, y1), b = node(x2, y2); deg[a]++; deg[b]++; par[find(a)] = find(b); }
+    const open = new Set(par.map((_, k) => k).filter(k => deg[k] < 2).map(find));
+    const loops = new Set(par.map((_, k) => find(k)).filter(r => !open.has(r))).size;
+    let L = (bb[2] - bb[0]) * scale, W = (bb[3] - bb[1]) * scale, units = uc ? 'units from file' : 'assumed mm';
+    // No units in the file and a part this small: almost certainly drawn in inches.
+    if (!uc && Math.max(L, W) < 25) { L *= 25.4; W *= 25.4; scale = 25.4; units = "assumed inches; change the size if that's wrong"; }
+    return { kind: 'panel', L, W, cutM: len * scale / 1000, holes: Math.max(0, circles + closed + loops - 1), units };
   }
 
   // ---------- 3D meshes ----------
@@ -176,7 +204,10 @@
     if (t.length < 9) throw new Error('empty mesh');
     const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
     let area = 0, vol = 0;
-    for (let i = 0; i < t.length; i += 9) {
+    for (let i = 0; i + 8 < t.length; i += 9) {
+      let ok = true;
+      for (let j = 0; j < 9; j++) if (!isFinite(t[i + j])) ok = false;
+      if (!ok) continue;
       for (let j = 0; j < 9; j++) { const a = j % 3; lo[a] = Math.min(lo[a], t[i + j]); hi[a] = Math.max(hi[a], t[i + j]); }
       const ux = t[i + 3] - t[i], uy = t[i + 4] - t[i + 1], uz = t[i + 5] - t[i + 2];
       const vx = t[i + 6] - t[i], vy = t[i + 7] - t[i + 1], vz = t[i + 8] - t[i + 2];
@@ -184,6 +215,7 @@
       vol += (t[i] * (t[i + 4] * t[i + 8] - t[i + 5] * t[i + 7]) - t[i + 1] * (t[i + 3] * t[i + 8] - t[i + 5] * t[i + 6]) + t[i + 2] * (t[i + 3] * t[i + 7] - t[i + 4] * t[i + 6])) / 6;
     }
     const [a, b, c] = [0, 1, 2].map(k => hi[k] - lo[k]).sort((x, y) => y - x);
+    if (!(isFinite(a) && a > 0 && isFinite(area) && isFinite(vol))) throw new Error('bad mesh');
     vol = Math.abs(vol);
     const wall = vol > 0 ? 2 * vol / area : 0;          // thin shell: volume ≈ (area / 2) × wall
     if (c <= Math.max(wall * 1.5, 0.5) || c < 0.04 * b) return { kind: 'panel', L: a, W: b, T: c, units: U };
