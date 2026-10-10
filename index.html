@@ -45,6 +45,11 @@ html,body{margin:0;background:#eef2f3}
 .wb .steps h3{font-size:17px;margin-bottom:6px}
 .wb .steps p{color:var(--muted);font-size:15px}
 /* quote tool */
+.wb .drop{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;padding:18px 20px;margin-bottom:8px;border:1.5px dashed var(--rule);background:var(--sheet)}
+.wb .drop.on{border-color:var(--sea);background:#fff}
+.wb .drop label.btn{display:inline-block;font:600 15px/1 var(--b);letter-spacing:0;text-transform:none;color:var(--paper);cursor:pointer}
+.wb .drop span{color:var(--muted)}
+.wb #cadmsg{margin:0 0 20px}
 .wb .tabs{display:flex;flex-wrap:wrap;border:1.5px solid var(--ink);width:fit-content;max-width:100%}
 .wb .tabs button{font:600 15px/1 var(--b);padding:12px 18px;background:none;border:0;border-right:1px solid var(--rule);color:var(--ink);cursor:pointer}
 .wb .tabs button:last-child{border-right:0}
@@ -137,6 +142,8 @@ html,body{margin:0;background:#eef2f3}
 <section id="quote">
  <div class="sh"><div class="lb">Price</div><div><h2>Get a price</h2><p>An estimate now. A firm quote after an engineer checks your part.</p></div></div>
 
+ <div class="drop" id="drop"><input type="file" id="cad" accept=".dxf,.step,.stp,.iges,.igs,.stl" hidden><label for="cad" class="btn pr">Upload a file</label><span>Drop a DXF, STEP or STL for an instant price, or fill in the fields.</span></div>
+ <p class="note" id="cadmsg"></p>
  <div class="tabs" role="tablist">
   <button type="button" role="tab" aria-selected="true" data-k="panel">Flat panel</button>
   <button type="button" role="tab" aria-selected="false" data-k="rotor">Drone rotor</button>
@@ -225,6 +232,7 @@ html,body{margin:0;background:#eef2f3}
 <div class="wb" style="padding-top:0"><div class="w" style="border-top:1px solid var(--rule);padding-top:16px;font-size:13px;color:var(--muted)">© 2026 Wyspa Technologies LLC · Prices are estimates until an engineer confirms them.</div></div>
 
 <script src="pricing.js"></script>
+<script src="autoquote.js" defer></script>
 <script>
 (function(){
 const P = window.WYSPA_PRICING, $ = s => document.querySelector(s), qf = $('#qf');
@@ -257,13 +265,14 @@ function calc(){
     const skin = cored ? (val('pSkin') || 0) : 0, coreT = cored ? T - 2 * skin : 0;
     const a = L * W / 1e6, n = cored ? 2 * Math.ceil(skin / m.t) : Math.ceil(T / m.t);
     mat = a * (n * m.perM2 + P.consumablesPerM2 + f.perM2 + (cored ? C.core.perM2mm * Math.max(coreT, 0) : 0));
-    hr = a * (n * C.hrPerM2Ply + f.hrPerM2 + (cored ? C.core.hrPerM2 : 0)) + C.hrPerPart + 2 * (L + W) / 1000 * C.hrPerMCut + (val('pHoles') || 0) * C.hrPerHole;
+    const cutM = fileGeo && fileGeo.L === L && fileGeo.W === W ? Math.max(fileGeo.cutM, 2 * (L + W) / 1000) : 2 * (L + W) / 1000;
+    hr = a * (n * C.hrPerM2Ply + f.hrPerM2 + (cored ? C.core.hrPerM2 : 0)) + C.hrPerPart + cutM * C.hrPerMCut + (val('pHoles') || 0) * C.hrPerHole;
     setup = price(C.setupHours, 0); lead = P.leadDays.panel;
     const [mx, my] = C.maxSize;
     if (Math.max(L, W) > mx || Math.min(L, W) > my) review.push(`Larger than the ${mx} × ${my} mm standard sheet`);
     if (T > X.panelMaxT) review.push(`Thicker than ${X.panelMaxT} mm`);
     if (cored && coreT < C.core.minT) review.push(`Core under ${C.core.minT} mm. Check total and skin thickness`);
-    spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins (about ${Math.round(skin * C.gsmPerMm)} gsm each) on ${+coreT.toFixed(1)} mm foam core` : `solid (about ${Math.round(T * C.gsmPerMm)} gsm)`}, ${f.label}, ${val('pHoles') || 0} holes`);
+    spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins (about ${Math.round(skin * C.gsmPerMm)} gsm each) on ${+coreT.toFixed(1)} mm foam core` : `solid (about ${Math.round(T * C.gsmPerMm)} gsm)`}, ${f.label}, ${val('pHoles') || 0} holes, ${cutM.toFixed(1)} m of cutting`);
   } else if (kind === 'rotor') {
     const D = val('rD'), B = val('rB'), m = P.plies[val('rMat')], geo = val('rGeo'), R = P.rotor, bm = R.bladeMult[B];
     mat = (R.matBase + D * D * R.matPerIn2) * bm * m.perM2 / P.plies.carbon.perM2;
@@ -306,6 +315,39 @@ function calc(){
   return { q, total, unitP, lines, warn, spec, lead };
 }
 
+let fileGeo = null;
+// Called by autoquote.js after reading a CAD file: attach it to the request and fill in the fields.
+function applyFile(g, file) {
+  const fi = $('#sf').elements.files, dt = new DataTransfer();
+  [...fi.files].filter(f => f.name !== file.name).forEach(f => dt.items.add(f));
+  dt.items.add(file); fi.files = dt.files;
+  if (!g) return;
+  const r = Math.round, put = (n, v) => { qf.querySelector(`[name="${n}"]`).value = v; };
+  let what;
+  if (kind === 'rotor') {
+    put('rD', Math.max(3, r(g.L / 25.4 * 2) / 2)); put('rGeo', 'new');
+    what = `${qf.elements.rD.value} in diameter`;
+  } else if (kind === 'assembly') {
+    what = `${r(g.L)} × ${r(g.W)} mm overall`;
+  } else if (g.kind === 'panel') {
+    setKind('panel');
+    put('pL', r(g.L)); put('pW', r(g.W));
+    if (g.T) put('pT', Math.max(0.3, +g.T.toFixed(1)));
+    if (g.holes != null) put('pHoles', g.holes);
+    fileGeo = g.cutM ? { L: r(g.L), W: r(g.W), cutM: g.cutM } : null;
+    what = `${r(g.L)} × ${r(g.W)} mm${g.T ? ` × ${g.T.toFixed(1)} mm` : ''}${g.holes != null ? `, ${g.holes} holes, ${g.cutM.toFixed(1)} m of cutting` : ''}`;
+  } else {
+    setKind('molded');
+    put('mL', r(g.L)); put('mW', r(g.W)); put('mH', r(g.H)); put('mTool', 'new');
+    put('mPly', Math.min(40, Math.max(1, Math.ceil((g.wall || 1) / P.plies[val('mMat')].t))));
+    put('mCx', g.complex ? 'complex' : 'medium');
+    what = `${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm${g.wall ? `, about ${g.wall.toFixed(1)} mm wall` : ''}`;
+  }
+  render();
+  $('#cadmsg').textContent = `From ${file.name}: ${what} (${g.units}). Check the fields${kind === 'panel' && !g.T ? ', set the thickness' : ''}, then send. Your file is attached.`;
+}
+window.WB = { applyFile };
+
 let last;
 function render(){
   const pf = fs('panel'), cored = pf.querySelector('[name=pCore]').value === 'core';
@@ -330,7 +372,6 @@ function setKind(k){
   kind = k;
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.k === k));
   qf.querySelectorAll('fieldset').forEach(f => f.hidden = f.dataset.k !== k);
-  $('#up').hidden = k === 'panel';
   $('#sendnote').textContent = UPLOAD_URL ? 'We reply by email with a firm quote.' : 'This opens an email. Attach your files before sending.';
   try { localStorage.setItem('wb-kind', k); } catch(e) {}
   render();
@@ -366,7 +407,7 @@ $('#go').onclick = async () => {
   if (!sf.reportValidity()) return;
   if (kind === 'assembly' && !fs('assembly').querySelector('[name=aDesc]').value.trim()) { $('#msg').textContent = 'Tell us what it is first.'; fs('assembly').querySelector('[name=aDesc]').focus(); return; }
   if (!UPLOAD_URL) return mailto();
-  const files = kind === 'panel' ? [] : [...sf.elements.files.files];
+  const files = [...sf.elements.files.files];
   if (files.length > 10) return void ($('#msg').textContent = 'Up to 10 files, please. Zip them if you have more.');
   if (files.reduce((t, f) => t + f.size, 0) > 25e6) return void ($('#msg').textContent = 'Files are over 25 MB. Zip them, or send without them and we will send you an upload link.');
   go.disabled = true; $('#msg').textContent = files.length ? `Uploading ${files.length} file${files.length > 1 ? 's' : ''}…` : 'Sending…';
