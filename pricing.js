@@ -18,20 +18,22 @@ window.WYSPA_PRICING = {
     { min: 250, mult: 0.80 },
   ],
 
-  // Raw material cost per m² per ply (fabric + resin), with ply thickness in mm
+  // Raw material cost per m² per ply (fabric + resin), cured ply thickness t in mm, fabric gsm per mm of cured laminate.
+  // 2026-10-10: Fibre Glast list prices x1.2 cutting scrap + epoxy at $39.81/kg x1.5 waste; t from Wyspa laminate engine
+  // (Vf 0.50 carbon, 0.45 glass, 0.55 prepreg). Sources: build_work/research/material-costs.md
   plies: {
-    carbon:  { label: "Carbon fiber", perM2: 55, t: 0.25 },
-    prepreg: { label: "Carbon prepreg",  perM2: 95, t: 0.25 },
-    glass:   { label: "Fiberglass",        perM2: 18, t: 0.25 },
-    hybrid:  { label: "Carbon + glass",         perM2: 38, t: 0.25 },
+    carbon:  { label: "Carbon fiber",   gsm: 200, t: 0.22, gsmPerMm: 900,  perM2: 65,       // 3K 2x2 twill
+               bulk: { gsm: 670, t: 0.75, perM2mm: 155 } },   // heavy 12K twill for the inside of thick laminates, $ per m² per mm
+    prepreg: { label: "Carbon prepreg", gsm: 200, t: 0.20, gsmPerMm: 1000, perM2: 169 },    // 3K twill prepreg, $163.86/yd list
+    glass:   { label: "Fiberglass",     gsm: 300, t: 0.26, gsmPerMm: 1140, perM2: 26 },     // 7781 E-glass
+    hybrid:  { label: "Carbon + glass", gsm: 250, t: 0.24, gsmPerMm: 1040, perM2: 46 },     // average of one carbon + one 7781 ply
   },
   consumablesPerM2: 20,       // peel ply, bag, breather, release, per m² of part per cure
 
   // Flat panels: laid up flat, cured, CNC cut
   panel: {
     materials: ["carbon", "prepreg", "glass", "hybrid"],
-    core: { label: "Foam core", perM2mm: 7, hrPerM2: 0.4, minT: 2 },  // core $ per m² per mm of core thickness
-    gsmPerMm: 1000,           // fabric weight per mm of cured skin (0.1 mm per 100 gsm)
+    core: { label: "Foam core", perM2mm: 7, hrPerM2: 0.4, minT: 3 },  // core $ per m² per mm; thinnest stock foam is 1/8 in (3.2 mm)
     finish: {
       matte: { label: "Matte", perM2: 0,  hrPerM2: 0 },
       gloss: { label: "Gloss one side",   perM2: 15, hrPerM2: 0.6 },
@@ -76,6 +78,9 @@ window.WYSPA_PRICING = {
     moldedMaxDim: 1500,       // mm, longest side
     moldedMaxDepth: 400,      // mm
     maxPlies: 20,
+    panelMaxSolidT: 10,       // mm, solid laminate (cure heat, voids, press size)
+    minSkin: 0.4,             // mm, cored panel skin (2 plies)
+    maxCoreToSkin: 50,        // core thickness / skin thickness (dents, inserts, edge crush)
   },
 
   // Lead time in working days by order type (before any shipping)

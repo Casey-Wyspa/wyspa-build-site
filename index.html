@@ -261,10 +261,16 @@ function calc(){
   let hr = 0, mat = 0, nre = 0, setup = 0, lead;
   if (kind === 'panel') {
     const L = val('pL'), W = val('pW'), T = val('pT'), m = P.plies[val('pMat')], cored = val('pCore') === 'core', f = P.panel.finish[val('pFin')], C = P.panel;
-    // Skin thickness from fabric weight: about 0.1 mm per 100 gsm. Core = total minus both skins.
+    // Core = total minus both skins.
     const skin = cored ? (val('pSkin') || 0) : 0, coreT = cored ? T - 2 * skin : 0;
-    const a = L * W / 1e6, n = cored ? 2 * Math.ceil(skin / m.t) : Math.ceil(T / m.t);
-    mat = a * (n * m.perM2 + P.consumablesPerM2 + f.perM2 + (cored ? C.core.perM2mm * Math.max(coreT, 0) : 0));
+    // Plies for one laminate: light face plies outside, heavy bulk fabric inside (whole plies, never less than the thickness needed); cheaper option wins
+    const lam = (tl, faces) => { const b = m.bulk, k = Math.max(1, Math.round(tl / m.t)), A = { n: k, cost: k * m.perM2 };
+      if (!b || tl <= faces * m.t) return A;
+      const bt = tl - faces * m.t, nb = Math.max(1, Math.round(bt / b.t)), B = { n: faces + nb, cost: faces * m.perM2 + Math.max(bt, nb * b.t) * b.perM2mm };
+      return B.cost < A.cost ? B : A; };
+    const lm1 = cored ? lam(skin, 1) : lam(T, 2), k = cored ? 2 : 1;
+    const a = L * W / 1e6, n = k * lm1.n;
+    mat = a * (k * lm1.cost + P.consumablesPerM2 + f.perM2 + (cored ? C.core.perM2mm * Math.max(coreT, 0) : 0));
     const cutM = fileGeo && fileGeo.L === L && fileGeo.W === W ? Math.max(fileGeo.cutM, 2 * (L + W) / 1000) : 2 * (L + W) / 1000;
     hr = a * (n * C.hrPerM2Ply + f.hrPerM2 + (cored ? C.core.hrPerM2 : 0)) + C.hrPerPart + cutM * C.hrPerMCut + (val('pHoles') || 0) * C.hrPerHole;
     setup = price(C.setupHours, 0); lead = P.leadDays.panel;
@@ -272,7 +278,10 @@ function calc(){
     if (Math.max(L, W) > mx || Math.min(L, W) > my) review.push(`Larger than the ${mx} × ${my} mm standard sheet`);
     if (T > X.panelMaxT) review.push(`Thicker than ${X.panelMaxT} mm`);
     if (cored && coreT < C.core.minT) review.push(`Core under ${C.core.minT} mm. Check total and skin thickness`);
-    spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins (about ${Math.round(skin * C.gsmPerMm)} gsm each) on ${+coreT.toFixed(1)} mm foam core` : `solid (about ${Math.round(T * C.gsmPerMm)} gsm)`}, ${f.label}, ${val('pHoles') || 0} holes, ${cutM.toFixed(1)} m of cutting`);
+    if (!cored && T > X.panelMaxSolidT) review.push(`Solid laminate thicker than ${X.panelMaxSolidT} mm`);
+    if (cored && skin < X.minSkin) review.push(`Skins under ${X.minSkin} mm`);
+    if (cored && coreT > X.maxCoreToSkin * skin) review.push('Thin skins on a thick core');
+    spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins (about ${Math.round(skin * m.gsmPerMm)} gsm each) on ${+coreT.toFixed(1)} mm foam core` : `solid (about ${Math.round(T * m.gsmPerMm)} gsm)`}, ${f.label}, ${val('pHoles') || 0} holes, ${cutM.toFixed(1)} m of cutting`);
   } else if (kind === 'rotor') {
     const D = val('rD'), B = val('rB'), m = P.plies[val('rMat')], geo = val('rGeo'), R = P.rotor, bm = R.bladeMult[B];
     mat = (R.matBase + D * D * R.matPerIn2) * bm * m.perM2 / P.plies.carbon.perM2;
@@ -354,7 +363,7 @@ let last;
 function render(){
   const pf = fs('panel'), cored = pf.querySelector('[name=pCore]').value === 'core';
   $('#pSkinL').hidden = !cored;
-  $('#pSkinHint').textContent = `≈ ${Math.round((parseFloat(pf.querySelector('[name=pSkin]').value) || 0) * P.panel.gsmPerMm).toLocaleString('en-US')} gsm`;
+  $('#pSkinHint').textContent = `≈ ${Math.round((parseFloat(pf.querySelector('[name=pSkin]').value) || 0) * (P.plies[pf.querySelector('[name=pMat]').value] || P.plies.carbon).gsmPerMm).toLocaleString('en-US')} gsm`;
   last = calc();
   if (last.manual) {
     $('#estlb').textContent = 'Quote'; $('#tot').textContent = 'Engineer quote'; $('#tot').style.fontSize = 'clamp(30px,4vw,40px)';
