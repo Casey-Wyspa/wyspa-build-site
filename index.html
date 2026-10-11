@@ -157,8 +157,8 @@ html,body{margin:0;background:#eef2f3}
  <div class="qt">
   <form id="qf" onsubmit="return false">
    <fieldset data-k="panel">
-    <label>Length (mm)<input type="number" name="pL" value="600" min="10" step="1"></label>
-    <label>Width (mm)<input type="number" name="pW" value="400" min="10" step="1"></label>
+    <label>Length (max 2400 mm)<input type="number" name="pL" value="600" min="10" step="1"></label>
+    <label>Width (max 1200 mm)<input type="number" name="pW" value="400" min="10" step="1"></label>
     <label>Thickness (mm)<input type="number" name="pT" value="2" min="0.3" max="50" step="0.1"></label>
     <label>Material<select name="pMat"></select></label>
     <label>Foam core<select name="pCore"><option value="solid">No, solid</option><option value="core">Yes, foam in the middle</option></select></label>
@@ -262,7 +262,7 @@ function calc(){
   const q = Math.max(1, Math.round(val('qty') || 1)), warn = [], spec = [], review = [], lm = qtyMult(q), X = P.review;
   let hr = 0, mat = 0, nre = 0, setup = 0, lead;
   if (kind === 'panel') {
-    const L = val('pL'), W = val('pW'), T = val('pT'), m = P.plies[val('pMat')], cored = val('pCore') === 'core', f = P.panel.finish[val('pFin')], C = P.panel;
+    const L = val('pL'), W = val('pW'), T = val('pT'), holes = Math.max(0, Math.round(val('pHoles') || 0)), m = P.plies[val('pMat')], cored = val('pCore') === 'core', f = P.panel.finish[val('pFin')], C = P.panel;
     // Core = total minus both skins.
     const skin = cored ? (val('pSkin') || 0) : 0, coreT = cored ? T - 2 * skin : 0;
     // Plies for one laminate: light face plies outside, heavy bulk fabric inside (whole plies, never less than the thickness needed); cheaper option wins
@@ -274,7 +274,7 @@ function calc(){
     const a = L * W / 1e6, n = k * lm1.n;
     mat = a * (k * lm1.cost + P.consumablesPerM2 + f.perM2 + (cored ? C.core.perM2mm * Math.max(coreT, 0) : 0));
     const cutM = fileGeo && fileGeo.L === L && fileGeo.W === W ? Math.max(fileGeo.cutM, 2 * (L + W) / 1000) : 2 * (L + W) / 1000;
-    hr = a * (n * C.hrPerM2Ply + f.hrPerM2 + (cored ? C.core.hrPerM2 : 0)) + C.hrPerPart + cutM * C.hrPerMCut + (val('pHoles') || 0) * C.hrPerHole;
+    hr = a * (n * C.hrPerM2Ply + f.hrPerM2 + (cored ? C.core.hrPerM2 : 0)) + C.hrPerPart + cutM * C.hrPerMCut + holes * C.hrPerHole;
     setup = price(C.setupHours, 0); lead = P.leadDays.panel;
     const [mx, my] = C.maxSize;
     if (Math.max(L, W) > mx || Math.min(L, W) > my) review.push(`Larger than the ${mx} × ${my} mm standard sheet`);
@@ -283,7 +283,7 @@ function calc(){
     if (!cored && T > X.panelMaxSolidT) review.push(`Solid laminate thicker than ${X.panelMaxSolidT} mm`);
     if (cored && skin < X.minSkin) review.push(`Outer layers under ${X.minSkin} mm`);
     if (cored && coreT > X.maxCoreToSkin * skin) review.push('Thin outer layers on a thick core');
-    spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins (about ${Math.round(skin * m.gsmPerMm)} gsm each) on ${+coreT.toFixed(1)} mm foam core` : `solid (about ${Math.round(T * m.gsmPerMm)} gsm)`}, ${f.label}, ${val('pHoles') || 0} holes, ${cutM.toFixed(1)} m of cutting`);
+    spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins (about ${Math.round(skin * m.gsmPerMm)} gsm each) on ${+coreT.toFixed(1)} mm foam core` : `solid (about ${Math.round(T * m.gsmPerMm)} gsm)`}, ${f.label}, ${holes} holes, ${cutM.toFixed(1)} m of cutting`);
   } else if (kind === 'rotor') {
     const D = val('rD'), B = val('rB'), m = P.plies[val('rMat')], geo = val('rGeo'), R = P.rotor, bm = R.bladeMult[B];
     mat = (R.matBase + D * D * R.matPerIn2) * bm * m.perM2 / P.plies.carbon.perM2;
@@ -346,7 +346,8 @@ function applyFile(g, file, sketch) {
   const r = Math.round, put = (n, v) => { qf.querySelector(`[name="${n}"]`).value = v; };
   let what;
   if (kind === 'rotor') {
-    put('rD', Math.max(3, r(g.L / 25.4 * 2) / 2)); put('rGeo', 'new');
+    // A file means they have a design; keep "Repeat order" if they picked it (B17).
+    put('rD', Math.max(3, r(g.L / 25.4 * 2) / 2)); if (val('rGeo') === 'design') put('rGeo', 'new');
     what = `${qf.elements.rD.value} in diameter`;
   } else if (kind === 'assembly') {
     what = `${r(g.L)} × ${r(g.W)} mm overall`;
@@ -388,7 +389,7 @@ function draw(){
   $('#pSkinL').hidden = fs('panel').querySelector('[name=pCore]').value !== 'core';
   last = calc();
   // Empty, zero or negative sizes (common while retyping on a phone): no price, never $NaN or a negative part price.
-  badSize = kind !== 'assembly' && ([...fs(kind).querySelectorAll('input[type=number]:not([name=qty])')].some(el => {
+  badSize = kind !== 'assembly' && ([...fs(kind).querySelectorAll('input[type=number]:not([name=qty]):not([name=pHoles])')].some(el => {
     const v = parseFloat(el.value), size = ['pL', 'pW', 'pT', 'rD', 'mL', 'mW', 'mWall'].includes(el.name);
     return el.value === '' ? size : v < 0 || (size && v <= 0);
   }) || (!last.manual && !isFinite(last.total)));
