@@ -58,33 +58,43 @@
       else if (c === 40) cur.r = n; else if (c === 50) cur.a0 = n; else if (c === 51) cur.a1 = n;
       else if (c === 42 && cur.b.length) cur.b[cur.b.length - 1] = n;
       else if (c === 70) cur.flags = parseInt(v, 10);
+      else if (c === 8) cur.layer = v;
     }
     // POLYLINE + VERTEX entities -> one polyline
     const flat = [];
     for (let k = 0; k < ents.length; k++) {
       const e = ents[k];
       if (e.type === 'POLYLINE') {
-        const p = { type: 'LWPOLYLINE', x: [], y: [], b: [], flags: e.flags };
+        const p = { type: 'LWPOLYLINE', x: [], y: [], b: [], flags: e.flags, layer: e.layer };
         while (ents[k + 1] && ents[k + 1].type === 'VERTEX') { const vt = ents[++k]; p.x.push(vt.x[0]); p.y.push(vt.y[0]); p.b.push(vt.b[0] || 0); }
         flat.push(p);
       } else if (e.type !== 'VERTEX' && e.type !== 'SEQEND') flat.push(e);
     }
-    let len = 0, closed = 0, circles = 0;
-    const segs = [];   // open pieces (LINE, ARC, open polylines) to chain into loops
-    const bb = [Infinity, Infinity, -Infinity, -Infinity];
-    const pt = (x, y) => { bb[0] = Math.min(bb[0], x); bb[1] = Math.min(bb[1], y); bb[2] = Math.max(bb[2], x); bb[3] = Math.max(bb[3], y); };
+    // Drawing exports: leave out the border, title block, notes and dimensions (by layer name). TEXT, DIMENSION and
+    // INSERT (title-block blocks) are never read. If that leaves nothing, the part was on such a layer: read everything.
+    const drawn = e => /^(LINE|ARC|CIRCLE|LWPOLYLINE|SPLINE|ELLIPSE)$/.test(e.type);
+    const skip = /border|title|frame|sheet(?![\s_-]*metal)|format|tblock|notes?\b|(^|[^a-z])dim/i;
+    let list = flat.filter(e => drawn(e) && !skip.test(e.layer || ''));
+    if (!list.length) list = flat.filter(drawn);
+    // Each piece keeps its own box and length so a drawing frame can be told apart from the part inside it.
+    const box = () => [Infinity, Infinity, -Infinity, -Infinity], grow = (b, c) => { b[0] = Math.min(b[0], c[0]); b[1] = Math.min(b[1], c[1]); b[2] = Math.max(b[2], c[2]); b[3] = Math.max(b[3], c[3]); };
+    const all = [], shapes = [], segs = [];   // segs: open pieces (LINE, ARC, open polylines) to chain into loops
+    let cb;
+    const pt = (x, y) => grow(cb, [x, y, x, y]);
     const arcPts = (cx, cy, r, a0, a1) => { let s = a1 - a0; if (s <= 0) s += 360; for (let t = 0; t <= 16; t++) { const a = (a0 + s * t / 16) * Math.PI / 180; pt(cx + r * Math.cos(a), cy + r * Math.sin(a)); } return r * s * Math.PI / 180; };
-    for (const e of flat) {
-      if (e.type === 'LINE' && e.x.length) { pt(e.x[0], e.y[0]); pt(e.x2, e.y2); len += Math.hypot(e.x2 - e.x[0], e.y2 - e.y[0]); segs.push([e.x[0], e.y[0], e.x2, e.y2]); }
-      else if (e.type === 'CIRCLE') { circles++; len += arcPts(e.x[0], e.y[0], e.r, 0, 360); }
+    for (const e of list) {
+      cb = box();
+      let len = 0, closed = false, chain = null;
+      if (e.type === 'LINE' && e.x.length) { pt(e.x[0], e.y[0]); pt(e.x2, e.y2); len = Math.hypot(e.x2 - e.x[0], e.y2 - e.y[0]); chain = [e.x[0], e.y[0], e.x2, e.y2]; }
+      else if (e.type === 'CIRCLE') { closed = true; len = arcPts(e.x[0], e.y[0], e.r, 0, 360); }
       else if (e.type === 'ARC') {
-        len += arcPts(e.x[0], e.y[0], e.r, e.a0 || 0, e.a1 || 0);
+        len = arcPts(e.x[0], e.y[0], e.r, e.a0 || 0, e.a1 || 0);
         const r = e.r, a0 = (e.a0 || 0) * Math.PI / 180, a1 = (e.a1 || 0) * Math.PI / 180;
-        segs.push([e.x[0] + r * Math.cos(a0), e.y[0] + r * Math.sin(a0), e.x[0] + r * Math.cos(a1), e.y[0] + r * Math.sin(a1)]);
+        chain = [e.x[0] + r * Math.cos(a0), e.y[0] + r * Math.sin(a0), e.x[0] + r * Math.cos(a1), e.y[0] + r * Math.sin(a1)];
       }
       else if (e.type === 'LWPOLYLINE' && e.x.length > 1) {
         const isClosed = (e.flags & 1) === 1, n = e.x.length;
-        if (isClosed) closed++; else segs.push([e.x[0], e.y[0], e.x[n - 1], e.y[n - 1]]);
+        if (isClosed) closed = true; else chain = [e.x[0], e.y[0], e.x[n - 1], e.y[n - 1]];
         for (let k = 0; k < (isClosed ? n : n - 1); k++) {
           const j = (k + 1) % n, d = Math.hypot(e.x[j] - e.x[k], e.y[j] - e.y[k]), bu = e.b[k] || 0;
           pt(e.x[k], e.y[k]);
@@ -100,9 +110,15 @@
       } else if ((e.type === 'SPLINE' || e.type === 'ELLIPSE') && e.x.length) {
         for (let k = 0; k < e.x.length; k++) pt(e.x[k], e.y[k]);
         for (let k = 1; k < e.x.length; k++) len += Math.hypot(e.x[k] - e.x[k - 1], e.y[k] - e.y[k - 1]);
-        if (e.type === 'SPLINE' && (e.flags & 1)) closed++;
+        closed = e.type === 'SPLINE' && (e.flags & 1) === 1;
       }
+      if (!isFinite(cb[0])) continue;
+      const s = { bb: cb, len, closed };
+      all.push(s);
+      if (chain) segs.push([...chain, s]); else shapes.push(s);
     }
+    const bb = box();
+    all.forEach(s => grow(bb, s.bb));
     if (!isFinite(bb[0])) throw new Error('no geometry');
     // Chain loose pieces (LINE/ARC exports from Fusion, SolidWorks) into closed loops: a group of
     // pieces whose ends all meet another end is one loop (outline or cutout).
@@ -113,13 +129,35 @@
       for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) { const id = nodes.get((gx + dx) + ',' + (gy + dy)); if (id != null) return id; }
       const id = par.length; par.push(id); deg.push(0); nodes.set(gx + ',' + gy, id); return id;
     };
-    for (const [x1, y1, x2, y2] of segs) { const a = node(x1, y1), b = node(x2, y2); deg[a]++; deg[b]++; par[find(a)] = find(b); }
-    const open = new Set(par.map((_, k) => k).filter(k => deg[k] < 2).map(find));
-    const loops = new Set(par.map((_, k) => find(k)).filter(r => !open.has(r))).size;
-    let L = (bb[2] - bb[0]) * scale, W = (bb[3] - bb[1]) * scale, units = uc ? 'units from file' : 'assumed mm';
+    const ends = segs.map(([x1, y1, x2, y2]) => { const a = node(x1, y1), b = node(x2, y2); deg[a]++; deg[b]++; par[find(a)] = find(b); return a; });
+    const open = new Set(par.map((_, k) => k).filter(k => deg[k] < 2).map(find)), groups = new Map();
+    segs.forEach((g, k) => {
+      const r = find(ends[k]);
+      if (!groups.has(r)) { groups.set(r, { bb: box(), len: 0, closed: !open.has(r) }); shapes.push(groups.get(r)); }
+      grow(groups.get(r).bb, g[4].bb); groups.get(r).len += g[4].len;
+    });
     // No units in the file and a part this small: almost certainly drawn in inches.
-    if (!uc && Math.max(L, W) < 25) { L *= 25.4; W *= 25.4; scale = 25.4; units = "assumed inches; change the size if that's wrong"; }
-    return { kind: 'panel', L, W, cutM: len * scale / 1000, holes: Math.max(0, circles + closed + loops - 1), units };
+    let units = uc ? 'units from file' : 'assumed mm';
+    if (!uc && Math.max(bb[2] - bb[0], bb[3] - bb[1]) * scale < 25) { scale = 25.4; units = "assumed inches; change the size if that's wrong"; }
+    // Still the size of a drawing sheet (ISO A0-A4, ANSI A-E) with a closed frame: price the largest loop inside
+    // the frame if it has holes in it or stray title-block lines are left; otherwise keep the frame and ask.
+    const mm = b => [b[2] - b[0], b[3] - b[1]].map(v => v * scale).sort((x, y) => y - x);
+    const isSheet = b => { const [a, c] = mm(b); return [[1189, 841], [841, 594], [594, 420], [420, 297], [297, 210], [279.4, 215.9], [431.8, 279.4], [558.8, 431.8], [863.6, 558.8], [1117.6, 863.6]].some(([p, q]) => Math.abs(a / p - 1) < 0.03 && Math.abs(c / q - 1) < 0.03); };
+    const inside = (s, o) => s !== o && s.bb[0] >= o.bb[0] - tol && s.bb[1] >= o.bb[1] - tol && s.bb[2] <= o.bb[2] + tol && s.bb[3] <= o.bb[3] + tol;
+    const area = s => (s.bb[2] - s.bb[0]) * (s.bb[3] - s.bb[1]);
+    let part = { bb, len: all.reduce((t, s) => t + s.len, 0) }, inner = shapes;
+    if (isSheet(bb) && shapes.some(s => s.closed && isSheet(s.bb))) {
+      // Inner drawing frames (a loop covering most of the sheet) are not the part either.
+      const frame = s => { const [a, c] = mm(s.bb), [A, C] = mm(bb); return isSheet(s.bb) || (a > 0.85 * A && c > 0.85 * C); };
+      const cand = shapes.filter(s => s.closed && !frame(s)).sort((x, y) => area(y) - area(x))[0];
+      if (cand && (shapes.some(s => s.closed && inside(s, cand)) || shapes.some(s => !s.closed))) {
+        inner = shapes.filter(s => inside(s, cand));
+        part = { bb: cand.bb, len: cand.len + inner.reduce((t, s) => t + s.len, 0) };
+        units += '; we left out the drawing border, so check the size';
+      } else units += '; this may be the drawing sheet, not the part';
+    }
+    const [x0, y0, x1, y1] = part.bb, holes = inner.filter(s => s.closed).length - (part.bb === bb ? 1 : 0);
+    return { kind: 'panel', L: (x1 - x0) * scale, W: (y1 - y0) * scale, cutM: part.len * scale / 1000, holes: Math.max(0, holes), units };
   }
 
   // ---------- 3D meshes ----------

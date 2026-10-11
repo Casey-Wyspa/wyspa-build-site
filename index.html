@@ -318,7 +318,10 @@ function calc(){
     spec.push(`Assembly: ${txt('aDesc') || '(none given)'}`, `Overall size: ${txt('aSize') || '?'} mm`);
   }
   if (review.length) return { q, manual: true, review, spec, warn: [], lines: [] };
-  const unitP = price(hr * lm, mat), lines = [
+  // Never charge more than the next quantity break would (labor discount steps at 10/50/250).
+  const nb = P.qtyBreaks.find(b => b.min > q), capped = nb && price(hr * qtyMult(nb.min), mat) * nb.min < price(hr * lm, mat) * q;
+  if (capped) warn.push(`Same total as ${nb.min} parts.`);
+  const unitP = capped ? price(hr * qtyMult(nb.min), mat) * nb.min / q : price(hr * lm, mat), lines = [
     [`Parts: ${q} × ${usd2(unitP)}`, unitP * q],
     setup && ['Setup', setup],
     nre && ['Mold (one time)', nre],
@@ -389,13 +392,14 @@ function draw(){
   $('#pSkinL').hidden = fs('panel').querySelector('[name=pCore]').value !== 'core';
   last = calc();
   // Empty, zero or negative sizes (common while retyping on a phone): no price, never $NaN or a negative part price.
-  badSize = kind !== 'assembly' && ([...fs(kind).querySelectorAll('input[type=number]:not([name=qty]):not([name=pHoles])')].some(el => {
+  const badQty = !(parseFloat(fs(kind).querySelector('[name=qty]').value) >= 1);
+  badSize = badQty || kind !== 'assembly' && ([...fs(kind).querySelectorAll('input[type=number]:not([name=qty]):not([name=pHoles])')].some(el => {
     const v = parseFloat(el.value), size = ['pL', 'pW', 'pT', 'rD', 'mL', 'mW', 'mWall'].includes(el.name);
     return el.value === '' ? size : v < 0 || (size && v <= 0);
   }) || (!last.manual && !isFinite(last.total)));
   if (badSize) {
     $('#estlb').textContent = 'Estimate'; $('#tot').style.fontSize = '';
-    $('#tot').textContent = '$–'; $('#per').textContent = 'Fill in the size to see a price.';
+    $('#tot').textContent = '$–'; $('#per').textContent = `Fill in the ${badQty ? 'quantity' : 'size'} to see a price.`;
     $('#lines').innerHTML = ''; $('#warn').innerHTML = '';
     return;
   }
@@ -442,7 +446,7 @@ function summary(){
   return [
     `Wyspa Build ${last.manual ? 'review' : 'quote'} request ${qid}`, '',
     ...last.spec, `Quantity: ${last.q}`, '',
-    ...(badSize ? ['No estimate: a size was left empty or below zero.'] : last.manual ? [`Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
+    ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [`Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
       ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
       `Estimate: ${usd(last.total)} (not binding)`,
       `Lead time: ${last.lead[0]}-${last.lead[1]} working days after approval`]),
