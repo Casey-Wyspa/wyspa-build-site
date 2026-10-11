@@ -278,6 +278,7 @@ function calc(){
     setup = price(C.setupHours, 0); lead = P.leadDays.panel;
     const [mx, my] = C.maxSize;
     if (Math.max(L, W) > mx || Math.min(L, W) > my) review.push(`Larger than the ${mx} × ${my} mm standard sheet`);
+    if (T < 0.3) review.push('Thickness under 0.3 mm. Is it in inches?');
     if (T > X.panelMaxT) review.push(`Thicker than ${X.panelMaxT} mm`);
     if (cored && coreT < C.core.minT) review.push(`Foam core under ${C.core.minT} mm. Check thickness and outer layers.`);
     if (!cored && T > X.panelMaxSolidT) review.push(`Solid laminate thicker than ${X.panelMaxSolidT} mm`);
@@ -310,6 +311,7 @@ function calc(){
       if (Math.max(L, W) > X.moldedMaxDim) review.push(`Longer than ${X.moldedMaxDim} mm`);
       if (H > X.moldedMaxDepth) review.push(`Deeper than ${X.moldedMaxDepth} mm`);
       if (n > X.maxPlies) review.push(`Wall thicker than ${+(X.maxPlies * m.t).toFixed(1)} mm`);
+      if (wall < 0.5) review.push('Wall under 0.5 mm. Is the file in inches?');
     }
     spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${a.toFixed(2)} m² surface), ${wall} mm wall (${n} plies), ${m.label}, ${c.label}, ${nre ? 'new mold' : 'repeat order, our existing mold'}`);
   } else {
@@ -321,6 +323,9 @@ function calc(){
   // Never charge more than the next quantity break would (labor discount steps at 10/50/250).
   const nb = P.qtyBreaks.find(b => b.min > q), capped = nb && price(hr * qtyMult(nb.min), mat) * nb.min < price(hr * lm, mat) * q;
   if (capped) warn.push(`Same total as ${nb.min} parts.`);
+  // Several CAD files attached, but the price is for one (B25).
+  const cad = [...$('#sf').elements.files.files].map(f => f.name).filter(n => /\.(dxf|stp|step|igs|iges|stl|3dm)$/i.test(n));
+  if (cad.length > 1 && cad.includes(pricedFile)) warn.push(`This price is for ${pricedFile} only. An engineer will price your other files by email.`);
   const unitP = capped ? price(hr * qtyMult(nb.min), mat) * nb.min / q : price(hr * lm, mat), lines = [
     [`Parts: ${q} × ${usd2(unitP)}`, unitP * q],
     setup && ['Setup', setup],
@@ -334,7 +339,7 @@ function calc(){
   return { q, total, unitP, lines, warn, spec, lead, belowMin };
 }
 
-let fileGeo = null, fileSolid = false, needSize = false, badSize = false;
+let fileGeo = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '';
 // Called by autoquote.js after reading a CAD file: attach it to the request and fill in the fields.
 function applyFile(g, file, sketch) {
   const fi = $('#sf').elements.files, dt = new DataTransfer();
@@ -346,6 +351,7 @@ function applyFile(g, file, sketch) {
   needSize = !g && !typed; fileSolid = false;
   if (sketch) $('#cadmsg').textContent = typed ? 'File attached. We\'ll use it with the sizes you typed.' : 'File attached. Type the size to see a price.';
   if (!g) return render();
+  pricedFile = file.name;
   const r = Math.round, put = (n, v) => { qf.querySelector(`[name="${n}"]`).value = v; };
   let what;
   if (kind === 'rotor') {
