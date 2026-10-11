@@ -17,7 +17,10 @@
       else if (ext === 'stl') geo = fromMesh(parseStl(await file.arrayBuffer()));
       else if (['step', 'stp', 'iges', 'igs'].includes(ext)) geo = fromMesh(await parseCad(file, ext), 'mm from file');
       else if (ext === '3dm') geo = await parse3dm(file);
-      else {
+      else if (file.type.startsWith('image/') || ['pdf', 'heic', 'heif', 'jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+        // applyFile shows the message (it knows whether sizes were typed).
+        return window.WB.applyFile(null, file, true);
+      } else {
         say(`We can't read .${ext} files here. Export a STEP or DXF and drop that in, or fill in the fields. Your file will still be sent with the request.`);
         return window.WB.applyFile(null, file);
       }
