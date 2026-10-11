@@ -304,10 +304,13 @@ function calc(){
     if (val('mTool') === 'new') nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) * c.tool, a * M.tool.matPerM2 * c.tool);
     lead = nre ? P.leadDays.moldedNewMold : P.leadDays.molded;
     if (q < 3 && nre) warn.push('With one or two parts, tooling is most of the cost. Ask about a printed or machined one-off mold.');
-    if (val('mCx') === 'complex') review.push('Closed or split mold, undercuts');
-    if (Math.max(L, W) > X.moldedMaxDim) review.push(`Longer than ${X.moldedMaxDim} mm`);
-    if (H > X.moldedMaxDepth) review.push(`Deeper than ${X.moldedMaxDepth} mm`);
-    if (n > X.maxPlies) review.push(`Wall thicker than ${+(X.maxPlies * m.t).toFixed(1)} mm`);
+    if (fileSolid) review.push('Closed or solid part');
+    else {
+      if (val('mCx') === 'complex') review.push('Closed or split mold, undercuts');
+      if (Math.max(L, W) > X.moldedMaxDim) review.push(`Longer than ${X.moldedMaxDim} mm`);
+      if (H > X.moldedMaxDepth) review.push(`Deeper than ${X.moldedMaxDepth} mm`);
+      if (n > X.maxPlies) review.push(`Wall thicker than ${+(X.maxPlies * m.t).toFixed(1)} mm`);
+    }
     spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${a.toFixed(2)} m² surface), ${wall} mm wall (${n} plies), ${m.label}, ${c.label}, ${nre ? 'new mold' : 'repeat order, our existing mold'}`);
   } else {
     const txt = n => fs('assembly').querySelector(`[name="${n}"]`).value.trim();
@@ -328,7 +331,7 @@ function calc(){
   return { q, total, unitP, lines, warn, spec, lead, belowMin };
 }
 
-let fileGeo = null, needSize = false, badSize = false;
+let fileGeo = null, fileSolid = false, needSize = false, badSize = false;
 // Called by autoquote.js after reading a CAD file: attach it to the request and fill in the fields.
 function applyFile(g, file, sketch) {
   const fi = $('#sf').elements.files, dt = new DataTransfer();
@@ -337,7 +340,7 @@ function applyFile(g, file, sketch) {
   // Unreadable CAD and untouched sizes: don't show the default part's price as if it were theirs.
   // Sketches (images, PDFs) are just attached; typed sizes keep their price, untouched defaults ask for a size.
   const typed = [...fs(kind).querySelectorAll('input[type=number]:not([name=qty])')].some(el => el.value !== el.defaultValue);
-  needSize = !g && !typed;
+  needSize = !g && !typed; fileSolid = false;
   if (sketch) $('#cadmsg').textContent = typed ? 'File attached. We\'ll use it with the sizes you typed.' : 'File attached. Type the size to see a price.';
   if (!g) return render();
   const r = Math.round, put = (n, v) => { qf.querySelector(`[name="${n}"]`).value = v; };
@@ -357,14 +360,19 @@ function applyFile(g, file, sketch) {
   } else {
     setKind('molded');
     put('mL', r(g.L)); put('mW', r(g.W)); put('mH', r(g.H)); put('mTool', 'new');
-    put('mWall', Math.max(0.2, Math.ceil((g.wall || 1) * 10 - 1e-9) / 10));
+    const wall = Math.max(0.2, Math.ceil((g.wall || 1) * 10 - 1e-9) / 10);
+    put('mWall', wall);
+    // Closed or solid (blade, foil, mast): the "wall" read from the file is over a quarter of the thinnest side.
+    fileSolid = g.wall > g.H / 4;
     // Shape from the file: shallow (depth under 15% of the longest side) = simple, unless the reader flagged it complex.
     const span = Math.max(g.L, g.W);
-    put('mCx', g.complex ? 'complex' : span > 0 && g.H / span < 0.15 ? 'simple' : 'medium');
-    what = `${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm${g.wall ? `, about ${g.wall.toFixed(1)} mm wall` : ''}`;
+    put('mCx', g.complex || fileSolid ? 'complex' : span > 0 && g.H / span < 0.15 ? 'simple' : 'medium');
+    what = `${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm${g.wall ? `, about ${wall} mm wall` : ''}`;
   }
   render();
-  $('#cadmsg').textContent = `From ${file.name}: ${what} (${g.units}). Check the fields${kind === 'panel' && !(g.T > 0.2) ? ', set the thickness' : ''}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if that\'s wrong.' : ''}`;
+  $('#cadmsg').textContent = fileSolid
+    ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part, like a blade, foil, mast or tube. These need a two-piece mold, so an engineer prices them. Send it and we'll reply with a price.`
+    : `From ${file.name}: ${what} (${g.units}). Check the fields${kind === 'panel' && !(g.T > 0.2) ? ', set the thickness' : ''}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if that\'s wrong.' : ''}`;
 }
 window.WB = { applyFile };
 
