@@ -328,7 +328,7 @@ function calc(){
   return { q, total, unitP, lines, warn, spec, lead, belowMin };
 }
 
-let fileGeo = null, needSize = false;
+let fileGeo = null, needSize = false, badSize = false;
 // Called by autoquote.js after reading a CAD file: attach it to the request and fill in the fields.
 function applyFile(g, file, sketch) {
   const fi = $('#sf').elements.files, dt = new DataTransfer();
@@ -379,6 +379,17 @@ io.observe(qf); io.observe($('#est'));
 function draw(){
   $('#pSkinL').hidden = fs('panel').querySelector('[name=pCore]').value !== 'core';
   last = calc();
+  // Empty, zero or negative sizes (common while retyping on a phone): no price, never $NaN or a negative part price.
+  badSize = kind !== 'assembly' && ([...fs(kind).querySelectorAll('input[type=number]:not([name=qty])')].some(el => {
+    const v = parseFloat(el.value), size = ['pL', 'pW', 'pT', 'rD', 'mL', 'mW', 'mWall'].includes(el.name);
+    return el.value === '' ? size : v < 0 || (size && v <= 0);
+  }) || (!last.manual && !isFinite(last.total)));
+  if (badSize) {
+    $('#estlb').textContent = 'Estimate'; $('#tot').style.fontSize = '';
+    $('#tot').textContent = '$–'; $('#per').textContent = 'Fill in the size to see a price.';
+    $('#lines').innerHTML = ''; $('#warn').innerHTML = '';
+    return;
+  }
   if (last.manual) {
     $('#estlb').textContent = 'Quote'; $('#tot').textContent = 'Engineer quote'; $('#tot').style.fontSize = 'clamp(30px,4vw,40px)';
     $('#per').textContent = kind === 'assembly' ? 'Send it with your files. We reply with a price.' : 'We need to look at this one. Send it and we reply with a price.';
@@ -422,7 +433,7 @@ function summary(){
   return [
     `Wyspa Build ${last.manual ? 'review' : 'quote'} request ${qid}`, '',
     ...last.spec, `Quantity: ${last.q}`, '',
-    ...(last.manual ? [`Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
+    ...(badSize ? ['No estimate: a size was left empty or below zero.'] : last.manual ? [`Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
       ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
       `Estimate: ${usd(last.total)} (not binding)`,
       `Lead time: ${last.lead[0]}-${last.lead[1]} working days after approval`]),
