@@ -217,10 +217,13 @@
       area += Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
       vol += (t[i] * (t[i + 4] * t[i + 8] - t[i + 5] * t[i + 7]) - t[i + 1] * (t[i + 3] * t[i + 8] - t[i + 5] * t[i + 6]) + t[i + 2] * (t[i + 3] * t[i + 7] - t[i + 4] * t[i + 6])) / 6;
     }
-    const [a, b, c] = [0, 1, 2].map(k => hi[k] - lo[k]).sort((x, y) => y - x);
+    let [a, b, c] = [0, 1, 2].map(k => hi[k] - lo[k]).sort((x, y) => y - x);
     if (!(isFinite(a) && a > 0 && isFinite(area) && isFinite(vol))) throw new Error('bad mesh');
     vol = Math.abs(vol);
-    const wall = vol > 0 ? 2 * vol / area : 0;          // thin shell: volume ≈ (area / 2) × wall
+    let wall = vol > 0 ? 2 * vol / area : 0;            // thin shell: volume ≈ (area / 2) × wall
+    // No units (STL) and tiny: almost certainly drawn in inches, same rule as DXF. Small-ish: ask.
+    if (U === 'assumed mm' && a < 25) { [a, b, c, wall] = [a, b, c, wall].map(v => v * 25.4); U = "assumed inches; change the size if that's wrong"; }
+    else if (U === 'assumed mm' && a < 60) U = "read as mm; if it's in inches, fix the size";
     if (c <= Math.max(wall * 1.5, 0.5) || c < 0.04 * b) return { kind: 'panel', L: a, W: b, T: c, units: U };
     const shape = (area / 2) / (a * b);                 // mold-side surface vs. footprint
     return { kind: 'molded', L: a, W: b, H: c, wall, complex: shape > 2.5, units: U };
