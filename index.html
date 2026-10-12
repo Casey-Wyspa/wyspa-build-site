@@ -300,14 +300,18 @@ function calc(){
     setup = price(C.setupHours, 0); lead = P.leadDays.panel;
     const [mx, my] = C.maxSize;
     if (Math.max(L, W) > mx || Math.min(L, W) > my) review.push(`Larger than the ${mx} × ${my} mm standard sheet`);
-    review.push(...[small('pL', 'Length', 25), small('pW', 'Width', 25)].filter(Boolean));
+    // B36: a bare 48 × 30 × 19 is a block, not a panel; likely inches up to 60.
+    const lim = n => val(n) < 25 || T <= Math.min(L, W) / 4 ? 25 : 60;
+    review.push(...[small('pL', 'Length', lim('pL')), small('pW', 'Width', lim('pW'))].filter(Boolean));
     if (T < 0.3) review.push(`Thickness under 0.3 mm. Is it in inches?${typedIn('pT')}`);
-    if (T > X.panelMaxT) review.push(`Thicker than ${X.panelMaxT} mm`);
-    if (cored && coreT < C.core.minT) review.push(`Foam core under ${C.core.minT} mm. Check thickness and outer layers.`);
-    if (!cored && T > X.panelMaxSolidT) review.push(`Solid laminate thicker than ${X.panelMaxSolidT} mm`);
+    const maxT = cored ? X.panelCoreMaxT : X.panelMaxT;
+    if (T > maxT) review.push(`Thicker than ${maxT} mm`);
+    if (cored && coreT <= 0) review.push(`Too thin for a foam core. ${typedIn('pT') ? `Is it in inches?${typedIn('pT')}` : 'Check thickness and outer layers.'}`);
+    else if (cored && coreT < C.core.minT) review.push(`Foam core under ${C.core.minT} mm. Check thickness and outer layers.`);
+    if (!cored && T > X.panelMaxSolidT) review.push(`Solid laminate thicker than ${X.panelMaxSolidT} mm. Foam in the middle? Set Foam core to Yes.`);
     if (cored && skin < X.minSkin) review.push(`Outer layers under ${X.minSkin} mm`);
     if (cored && coreT > X.maxCoreToSkin * skin) review.push('Thin outer layers on a thick core');
-    spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins (about ${Math.round(skin * m.gsmPerMm)} gsm each) on ${+coreT.toFixed(1)} mm foam core` : `solid (about ${Math.round(T * m.gsmPerMm)} gsm)`}, ${f.label}, ${holes} holes, ${cutM.toFixed(1)} m of cutting`);
+    spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins (about ${Math.round(skin * m.gsmPerMm)} gsm each)${coreT > 0 ? ` on ${+coreT.toFixed(1)} mm foam core` : ''}` : `solid (about ${Math.round(T * m.gsmPerMm)} gsm)`}, ${f.label}, ${holes} holes, ${cutM.toFixed(1)} m of cutting`);
   } else if (kind === 'rotor') {
     const D = val('rD'), B = val('rB'), m = P.plies[val('rMat')], geo = val('rGeo'), R = P.rotor, bm = R.bladeMult[B];
     mat = (R.matBase + D * D * R.matPerIn2) * bm * m.perM2 / P.plies.carbon.perM2;

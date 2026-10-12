@@ -72,7 +72,8 @@ window.WYSPA_PRICING = {
 
   // Anything past these limits gets no instant price; it goes to engineer review instead
   review: {
-    panelMaxT: 25,            // mm
+    panelMaxT: 25,            // mm, solid panels
+    panelCoreMaxT: 40,        // mm, foam-core panels (1 in core + skins); research/pricing/cored-limit-proposal-2026-10-12.md
     rotorMaxD: 40,            // in
     rotorMaxBlades: 3,
     moldedMaxDim: 1500,       // mm, longest side
