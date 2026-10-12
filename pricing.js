@@ -61,9 +61,9 @@ window.WYSPA_PRICING = {
   molded: {
     materials: ["carbon", "prepreg", "glass", "hybrid"],
     complexity: {
-      simple:  { label: "Simple (open, shallow)",   labor: 1.0, tool: 1.0 },
-      medium:  { label: "Curved, with flanges or inserts",      labor: 1.6, tool: 1.7 },
-      complex: { label: "Complex (engineer quote)", labor: 2.6, tool: 2.8 },
+      simple:  { label: "Open, depth under half the width",   labor: 1.0, tool: 1.0 },
+      medium:  { label: "Deep, or has flanges or inserts",    labor: 1.6, tool: 1.7 },
+      complex: { label: "Closed or hollow (engineer quote)",  labor: 2.6, tool: 2.8 },
     },
     hrPerPart: 1.0, trimHours: 0.5,        // prep/demold and trim per part
     hrPerM2: 0.5, hrPerM2Ply: 0.12,        // layup per m² of surface, plus per ply

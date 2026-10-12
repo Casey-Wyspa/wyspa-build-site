@@ -327,16 +327,23 @@ function calc(){
   const cad = [...$('#sf').elements.files.files].map(f => f.name).filter(n => /\.(dxf|stp|step|igs|iges|stl|3dm)$/i.test(n));
   if (cad.length > 1 && cad.includes(pricedFile)) warn.push(`This price is for ${pricedFile} only. An engineer will price your other files by email.`);
   const unitP = capped ? price(hr * qtyMult(nb.min), mat) * nb.min / q : price(hr * lm, mat), lines = [
-    [`Parts: ${q} × ${usd2(unitP)}`, unitP * q],
+    // B29: show the volume discount on screen, not just in the emailed spec.
+    [`Parts: ${q} × ${usd2(unitP)}${(capped ? qtyMult(nb.min) : lm) < 1 ? ` (${Math.round((1 - (capped ? qtyMult(nb.min) : lm)) * 100)}% off labor only)` : ''}`, unitP * q],
     setup && ['Setup', setup],
     nre && ['Mold (one time)', nre],
     ['Engineer review', price(P.reviewHours, 0)],
-  ].filter(Boolean);
+  ].filter(Boolean).map(l => [l[0], Math.round(l[1])]);   // B31: whole dollars per line, so the lines add up to the total
   let total = lines.reduce((s, l) => s + l[1], 0);
   const belowMin = total < P.minOrder;
-  if (belowMin) { lines.push([`Minimum order (${usd(P.minOrder)})`, P.minOrder - total]); total = P.minOrder; }
+  // B32: how many of this part fit inside the minimum order.
+  let fit = q;
+  if (belowMin) {
+    const fixed = total - lines[0][1];
+    while (fit < 1000 && Math.round(price(hr * qtyMult(fit + 1), mat) * (fit + 1)) + fixed <= P.minOrder) fit++;
+    lines.push([`Minimum order (${usd(P.minOrder)})`, P.minOrder - total]); total = P.minOrder;
+  }
   if (lm < 1) spec.push(`Volume discount on labor: ${Math.round((1 - lm) * 100)}%`);
-  return { q, total, unitP, lines, warn, spec, lead, belowMin };
+  return { q, total, unitP, lines, warn, spec, lead, belowMin, fit };
 }
 
 let fileGeo = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '';
@@ -374,15 +381,16 @@ function applyFile(g, file, sketch) {
     put('mWall', wall);
     // Closed or solid (blade, foil, mast): the "wall" read from the file is over a quarter of the thinnest side.
     fileSolid = g.wall > g.H / 4;
-    // Shape from the file: shallow (depth under 15% of the longest side) = simple, unless the reader flagged it complex.
-    const span = Math.max(g.L, g.W);
-    put('mCx', g.complex || fileSolid ? 'complex' : span > 0 && g.H / span < 0.15 ? 'simple' : 'medium');
+    // Shape from the file (B28): an open shell less than half as deep as its shorter side = open/shallow; deeper = medium.
+    // Flanges and inserts can't be read from a mesh, so the buyer picks those. Was depth < 15% of the longest side.
+    const span = Math.min(g.L, g.W);
+    put('mCx', g.complex || fileSolid ? 'complex' : span > 0 && g.H / span < 0.5 ? 'simple' : 'medium');
     what = `${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm${g.wall ? `, about ${wall} mm wall` : ''}`;
   }
   render();
   $('#cadmsg').textContent = fileSolid
     ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part, like a blade, foil, mast or tube. These need a two-piece mold, so an engineer prices them. Send it and we'll reply with a price.`
-    : `From ${file.name}: ${what} (${g.units}). Check the fields${kind === 'panel' && !(g.T > 0.2) ? ', set the thickness' : ''}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if that\'s wrong.' : ''}`;
+    : `From ${file.name}: ${what} (${g.units}). Check the fields${kind === 'panel' && !(g.T > 0.2) ? ', set the thickness' : ''}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
 }
 window.WB = { applyFile };
 
@@ -426,7 +434,7 @@ function draw(){
   $('#per').textContent = `${usd(last.total / last.q)} each · ready in ${last.lead[0]}–${last.lead[1]} working days after you approve`;
   $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Total</td><td class="n">${usd(last.total)}</td></tr>`;
   // Minimum-order note is shown on the page only; the email already carries the "Minimum order" line.
-  $('#warn').innerHTML = [...last.warn, ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}. You can add parts up to that total at no extra cost.`] : [])].map(w => `<div>${w}</div>`).join('');
+  $('#warn').innerHTML = [...last.warn, ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('');
 }
 
 function setKind(k){
