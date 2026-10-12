@@ -67,7 +67,7 @@ window.WYSPA_PRICING = {
     },
     hrPerPart: 1.0, trimHours: 0.5,        // prep/demold and trim per part
     hrPerM2: 0.5, hrPerM2Ply: 0.12,        // layup per m² of surface, plus per ply
-    tool: { hrMin: 16, hrPerM2: 30, matPerM2: 250 },  // plug + mold
+    tool: { hrMin: 16, hrPerM2: 30, matPerM2: 250 },  // plug + mold; hrMin counted once, the shape's tool factor scales only the area hours (B42, 2026-10-12)
   },
 
   // Anything past these limits gets no instant price; it goes to engineer review instead

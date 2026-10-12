@@ -329,7 +329,7 @@ function calc(){
     const a = (L * W + 2 * H * (L + W)) / 1e6;
     mat = a * (n * m.perM2 + P.consumablesPerM2);
     hr = M.hrPerPart + M.trimHours + a * (M.hrPerM2 + n * M.hrPerM2Ply) * c.labor;
-    if (val('mTool') === 'new') nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) * c.tool, a * M.tool.matPerM2 * c.tool);
+    if (val('mTool') === 'new') nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) + (c.tool - 1) * a * M.tool.hrPerM2, a * M.tool.matPerM2 * c.tool);  // B42: minimum hours counted once; shape factor scales only the area hours
     lead = nre ? P.leadDays.moldedNewMold : P.leadDays.molded;
     if (q < 3 && nre) warn.push('With one or two parts, tooling is most of the cost. Ask about a printed or machined one-off mold.');
     if (fileSolid) review.push('Closed or solid part');
