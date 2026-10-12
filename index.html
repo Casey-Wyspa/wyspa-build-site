@@ -485,8 +485,10 @@ function draw(){
   $('#tot').textContent = usd(last.total);
   $('#per').textContent = `${usd(last.total / last.q)} each · Ready about ${readyRange()} if you approve today`;
   $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Total</td><td class="n">${usd(last.total)}</td></tr>`;
-  // Minimum-order note is shown on the page only; the email already carries the "Minimum order" line.
-  $('#warn').innerHTML = [...last.warn, ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('');
+  // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
+  // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
+  const plain = kind === 'panel' && !$('#sf').elements.files.files.length ? ['This price is for a plain rectangle with holes. Send a drawing to price cutouts and shaped edges.'] : [];
+  $('#warn').innerHTML = [...plain, ...last.warn, ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('');
 }
 
 function setKind(k){
