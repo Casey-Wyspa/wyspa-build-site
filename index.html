@@ -220,6 +220,7 @@ html,body{margin:0;background:#eef2f3}
     <label style="position:absolute;left:-9999px" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
    </fieldset>
   </form>
+  <p class="note" id="needmsg" hidden></p>
   <div class="cta"><button class="btn pr" type="button" id="go">Send</button></div>
   <p class="note" id="msg"></p>
  </div>
@@ -376,7 +377,8 @@ function applyFile(g, file, sketch) {
     what = `${r(g.L)} × ${r(g.W)} mm${g.T > 0.2 ? ` × ${g.T.toFixed(1)} mm` : ''}${g.holes != null ? `, ${g.holes} holes` : ''}${g.cutM ? `, ${g.cutM.toFixed(1)} m of cutting` : ''}`;
   } else {
     setKind('molded');
-    put('mL', r(g.L)); put('mW', r(g.W)); put('mH', r(g.H)); put('mTool', 'new');
+    // Keep the buyer's Mold choice: a repeat customer who uploads a file still has our mold (B35).
+    put('mL', r(g.L)); put('mW', r(g.W)); put('mH', r(g.H));
     const wall = Math.max(0.2, Math.ceil((g.wall || 1) * 10 - 1e-9) / 10);
     put('mWall', wall);
     // Closed or solid (blade, foil, mast): the "wall" read from the file is over a quarter of the thinnest side.
@@ -395,8 +397,30 @@ function applyFile(g, file, sketch) {
 window.WB = { applyFile };
 
 let last;
+// Ready dates: today plus the lead time in working days (Sat/Sun skipped, no holidays).
+function addWorkDays(n){
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  while (n > 0) { d.setDate(d.getDate() + 1); if (d.getDay() % 6) n--; }
+  return d;
+}
+const readyDates = () => [addWorkDays(last.lead[0]), addWorkDays(last.lead[1])];
+const shortDate = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+// "Nov 3–17", or "Nov 24–Dec 8" when the range crosses a month.
+const readyRange = () => { const [a, b] = readyDates(); return `${shortDate(a)}–${a.getMonth() === b.getMonth() ? b.getDate() : shortDate(b)}`; };
+// 'sooner', 'tight' or '' comparing the Need-by date with the ready range (only when there is an instant price).
+function needFit(){
+  const v = $('#sf').elements.need.value;
+  if (!v || badSize || needSize || !last || last.manual || !last.lead) return '';
+  const [y, m, dd] = v.split('-').map(Number), need = new Date(y, m - 1, dd), [a, b] = readyDates();
+  return need < a ? 'sooner' : need < b ? 'tight' : '';
+}
+function needNote(){
+  const f = needFit(), el = $('#needmsg');
+  el.textContent = f === 'sooner' ? "That's sooner than we can usually make it. Add a note and we'll ask the shop." : f === 'tight' ? "That's tight. We'll check with the shop." : '';
+  el.hidden = !f;
+}
 // Phones: a bar pinned to the bottom shows the total while the form is on screen and the price box isn't.
-function render(){ draw(); $('#barlb').textContent = $('#estlb').textContent; $('#bartot').textContent = $('#tot').textContent; }
+function render(){ draw(); needNote(); $('#barlb').textContent = $('#estlb').textContent; $('#bartot').textContent = $('#tot').textContent; }
 const seen = new Map(), io = new IntersectionObserver(es => {
   es.forEach(e => seen.set(e.target, e.isIntersecting));
   $('#bar').classList.toggle('on', !!seen.get(qf) && !seen.get($('#est')));
@@ -431,7 +455,7 @@ function draw(){
     return;
   }
   $('#tot').textContent = usd(last.total);
-  $('#per').textContent = `${usd(last.total / last.q)} each · ready in ${last.lead[0]}–${last.lead[1]} working days after you approve`;
+  $('#per').textContent = `${usd(last.total / last.q)} each · Ready about ${readyRange()} if you approve today`;
   $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Total</td><td class="n">${usd(last.total)}</td></tr>`;
   // Minimum-order note is shown on the page only; the email already carries the "Minimum order" line.
   $('#warn').innerHTML = [...last.warn, ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('');
@@ -450,6 +474,10 @@ function setKind(k){
 }
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setKind(b.dataset.k));
 qf.addEventListener('input', () => { needSize = false; render(); });
+// No past dates in Need by (B33).
+{ const t = new Date(); $('#sf').elements.need.min = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; }
+$('#sf').elements.need.addEventListener('change', needNote);
+$('#sf').elements.need.addEventListener('input', needNote);
 qf.elements.pCore.addEventListener('change', e => {
   const t = qf.elements.pT;
   if (e.target.value === 'core' && parseFloat(t.value) < 6) { t.value = 12; render(); }
@@ -463,9 +491,9 @@ function summary(){
     ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [`Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
       ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
       `Estimate: ${usd(last.total)} (not binding)`,
-      `Lead time: ${last.lead[0]}-${last.lead[1]} working days after approval`]),
+      `Lead time: ${last.lead[0]}–${last.lead[1]} working days after approval (about ${readyRange()} if approved today)`]),
     ...(last.warn.length ? ['', 'Notes:', ...last.warn.map(w => '- ' + w)] : []), '',
-    `Name: ${s.name.value}`, `Company: ${s.org.value}`, `Email: ${s.email.value}`, `Need by: ${s.need.value || 'flexible'}`,
+    `Name: ${s.name.value}`, `Company: ${s.org.value}`, `Email: ${s.email.value}`, `Need by: ${s.need.value || 'flexible'}${({ sooner: ' (before our lead time, check with shop)', tight: ' (tight, check with shop)' })[needFit()] || ''}`,
     `Application and loads: ${s.notes.value}`, '', UPLOAD_URL ? '' : '[Attach CAD / drawings / sketch]'
   ].join('\n');
 }
