@@ -55,7 +55,7 @@ html,body{margin:0;background:#eef2f3}
 .wb .tabs button:last-child{border-right:0}
 .wb .tabs button[aria-selected=true]{background:var(--ink);color:var(--paper)}
 .wb .qt{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:32px;margin-top:24px;align-items:start}
-.wb form fieldset{border:0;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px}
+.wb form fieldset{border:0;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px;align-items:start}
 .wb fieldset[hidden]{display:none}
 .wb label{display:grid;gap:6px;font:500 12px/1.3 var(--m);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .wb label.full{grid-column:1/-1}
@@ -73,6 +73,8 @@ html,body{margin:0;background:#eef2f3}
 .wb .warn{margin-top:12px;padding:10px 12px;border-left:3px solid var(--signal);font-size:14px;color:var(--ink);background:#fff}
 .wb .warn:empty{display:none}
 .wb .note{font-size:13px;color:var(--muted);margin-top:12px}
+.wb .cv{font:400 13px var(--b);color:var(--sea);text-transform:none;letter-spacing:0}
+.wb .cv:empty{display:none}
 .wb .send{margin-top:28px;padding-top:24px;border-top:1px solid var(--rule)}
 .wb .send fieldset{margin-top:16px}
 .wb .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:32px}
@@ -157,9 +159,9 @@ html,body{margin:0;background:#eef2f3}
  <div class="qt">
   <form id="qf" onsubmit="return false">
    <fieldset data-k="panel">
-    <label>Length (max 2400 mm)<input type="number" name="pL" value="600" min="10" step="1"></label>
-    <label>Width (max 1200 mm)<input type="number" name="pW" value="400" min="10" step="1"></label>
-    <label>Thickness (mm)<input type="number" name="pT" value="2" min="0.3" max="50" step="0.1"></label>
+    <label>Length (max 2400 mm)<input type="text" name="pL" value="600"></label>
+    <label>Width (max 1200 mm)<input type="text" name="pW" value="400"></label>
+    <label>Thickness (mm or in)<input type="text" name="pT" value="2"></label>
     <label>Material<select name="pMat"></select></label>
     <label>Foam core<select name="pCore"><option value="solid">No, solid</option><option value="core">Yes, foam in the middle</option></select></label>
     <label id="pSkinL" hidden>Outer layers, each side (mm)<input type="number" name="pSkin" value="1" min="0.1" max="10" step="0.1"></label>
@@ -168,7 +170,7 @@ html,body{margin:0;background:#eef2f3}
     <label>Quantity<input type="number" name="qty" value="10" min="1" step="1"></label>
    </fieldset>
    <fieldset data-k="rotor" hidden>
-    <label>Diameter (in)<input type="number" name="rD" value="15" min="3" max="80" step="0.5"></label>
+    <label>Diameter (in or mm)<input type="text" name="rD" value="15"></label>
     <label>Blades<select name="rB"><option>2</option><option>3</option><option>4</option></select></label>
     <label>Material<select name="rMat"></select></label>
     <label>Mold<select name="rGeo">
@@ -179,10 +181,10 @@ html,body{margin:0;background:#eef2f3}
     <label>Quantity<input type="number" name="qty" value="8" min="1" step="1"></label>
    </fieldset>
    <fieldset data-k="molded" hidden>
-    <label>Length (mm)<input type="number" name="mL" value="500" min="10" step="1"></label>
-    <label>Width (mm)<input type="number" name="mW" value="300" min="10" step="1"></label>
-    <label>Depth (mm)<input type="number" name="mH" value="80" min="0" step="1"></label>
-    <label>Wall thickness (mm)<input type="number" name="mWall" value="1" min="0.2" max="20" step="0.1"></label>
+    <label>Length (mm or in)<input type="text" name="mL" value="500"></label>
+    <label>Width (mm or in)<input type="text" name="mW" value="300"></label>
+    <label>Depth (mm or in)<input type="text" name="mH" value="80"></label>
+    <label>Wall thickness (mm or in)<input type="text" name="mWall" value="1"></label>
     <label>Material<select name="mMat"></select></label>
     <label>Mold<select name="mTool"><option value="new">Make a new mold</option><option value="have">Repeat order (you have my mold)</option></select></label>
     <label class="full">Shape<select name="mCx"></select></label>
@@ -254,8 +256,27 @@ const d = new Date(), qid = 'WB-' + [d.getFullYear() % 100, d.getMonth() + 1, d.
 $('#qid').textContent = qid;
 
 const fs = k => qf.querySelector(`fieldset[data-k="${k}"]`);
-const val = n => { const el = fs(kind).querySelector(`[name="${n}"]`); return el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.value : parseFloat(el.value); };
-const qtyMult = q => P.qtyBreaks.filter(b => q >= b.min).pop().mult;
+// Sizes can be typed in mm or inches (B34): "3", "3 mm", "0.125 in", '1/8"', "1 1/2 in", "1-1/2". A fraction with no unit is inches.
+// Returns the value in the field's unit (inches for rD, mm for the rest), NaN if unreadable, and a note when the unit was converted.
+const SIZES = ['pL', 'pW', 'pT', 'rD', 'mL', 'mW', 'mH', 'mWall'];
+function size(el){
+  const fu = el.name === 'rD' ? 'in' : 'mm', s = el.value.trim().toLowerCase().replace(/[”″]|''/g, '"');
+  const m = s.match(/^(?:(\d+(?:\.\d*)?|\.\d+)|(?:(\d+)(?:\s+|\s*-\s*))?(\d+)\s*\/\s*(\d+))\s*(mm|cm|in|inch|inches|")?$/);
+  if (!m) return { v: NaN };
+  const num = m[1] != null ? +m[1] : +(m[2] || 0) + m[3] / m[4];
+  const u = m[5] ? (m[5] === 'mm' || m[5] === 'cm' ? m[5] : 'in') : m[1] != null ? fu : 'in';
+  if (!isFinite(num)) return { v: NaN };
+  if (u === fu) return { v: num, bare: !m[5] && m[1] != null };
+  const x = num * { mm: 1, cm: 10, in: 25.4 }[u] / (fu === 'in' ? 25.4 : 1), v = +x.toFixed(x < 1 ? 2 : 1);
+  const typed = `${m[1] != null ? m[1] : `${m[2] ? m[2] + ' ' : ''}${m[3]}/${m[4]}`} ${u}`;
+  return { v, typed, note: `${typed} = ${v} ${fu}` };
+}
+const val = n => { const el = fs(kind).querySelector(`[name="${n}"]`); return el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.value : SIZES.includes(n) ? size(el).v : parseFloat(el.value); };
+SIZES.forEach(n => qf.querySelector(`[name="${n}"]`).insertAdjacentHTML('afterend', '<span class="cv"></span>'));
+// A bare number the buyer typed (not from a file) that is too small to be mm: "Is it in inches? Type 10 in." (B36).
+const typedIn = n => { const el = fs(kind).querySelector(`[name="${n}"]`); return size(el).bare && el.value !== el.dataset.f ? ` Type ${el.value.trim()} in.` : ''; };
+const small = (n, what, min) => { const h = typedIn(n); return h && val(n) < min ? `${what} under ${min} mm. Is it in inches?${h}` : ''; };
+const qtyMult = q =>P.qtyBreaks.filter(b => q >= b.min).pop().mult;
 // Pricing method: labor hours x rate + materials x materialMult
 const price = (hours, mat) => hours * P.rate + mat * P.materialMult;
 
@@ -279,7 +300,8 @@ function calc(){
     setup = price(C.setupHours, 0); lead = P.leadDays.panel;
     const [mx, my] = C.maxSize;
     if (Math.max(L, W) > mx || Math.min(L, W) > my) review.push(`Larger than the ${mx} × ${my} mm standard sheet`);
-    if (T < 0.3) review.push('Thickness under 0.3 mm. Is it in inches?');
+    review.push(...[small('pL', 'Length', 25), small('pW', 'Width', 25)].filter(Boolean));
+    if (T < 0.3) review.push(`Thickness under 0.3 mm. Is it in inches?${typedIn('pT')}`);
     if (T > X.panelMaxT) review.push(`Thicker than ${X.panelMaxT} mm`);
     if (cored && coreT < C.core.minT) review.push(`Foam core under ${C.core.minT} mm. Check thickness and outer layers.`);
     if (!cored && T > X.panelMaxSolidT) review.push(`Solid laminate thicker than ${X.panelMaxSolidT} mm`);
@@ -312,7 +334,10 @@ function calc(){
       if (Math.max(L, W) > X.moldedMaxDim) review.push(`Longer than ${X.moldedMaxDim} mm`);
       if (H > X.moldedMaxDepth) review.push(`Deeper than ${X.moldedMaxDepth} mm`);
       if (n > X.maxPlies) review.push(`Wall thicker than ${+(X.maxPlies * m.t).toFixed(1)} mm`);
-      if (wall < 0.5) review.push('Wall under 0.5 mm. Is the file in inches?');
+      review.push(...[small('mL', 'Length', 25), small('mW', 'Width', 25)].filter(Boolean));
+      // B37: only blame the file when the wall came from one.
+      const wEl = fs('molded').querySelector('[name=mWall]');
+      if (wall < 0.5) review.push(`Wall under 0.5 mm. ${wEl.value === wEl.dataset.f ? 'Is the file in inches?' : `Is it in inches?${typedIn('mWall')}`}`);
     }
     spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${a.toFixed(2)} m² surface), ${wall} mm wall (${n} plies), ${m.label}, ${c.label}, ${nre ? 'new mold' : 'repeat order, our existing mold'}`);
   } else {
@@ -355,12 +380,13 @@ function applyFile(g, file, sketch) {
   dt.items.add(file); fi.files = dt.files;
   // Unreadable CAD and untouched sizes: don't show the default part's price as if it were theirs.
   // Sketches (images, PDFs) are just attached; typed sizes keep their price, untouched defaults ask for a size.
-  const typed = [...fs(kind).querySelectorAll('input[type=number]:not([name=qty])')].some(el => el.value !== el.defaultValue);
+  const typed = [...fs(kind).querySelectorAll('input:not([name=qty])')].some(el => el.value !== el.defaultValue);
   needSize = !g && !typed; fileSolid = false;
   if (sketch) $('#cadmsg').textContent = typed ? 'File attached. We\'ll use it with the sizes you typed.' : 'File attached. Type the size to see a price.';
   if (!g) return render();
   pricedFile = file.name;
-  const r = Math.round, put = (n, v) => { qf.querySelector(`[name="${n}"]`).value = v; };
+  // data-f marks a value that came from the file, so the typed-in-inches checks (B36) skip it.
+  const r = Math.round, put = (n, v) => { const el = qf.querySelector(`[name="${n}"]`); el.value = v; el.dataset.f = el.value; };
   let what;
   if (kind === 'rotor') {
     // A file means they have a design; keep "Repeat order" if they picked it (B17).
@@ -431,9 +457,11 @@ function draw(){
   last = calc();
   // Empty, zero or negative sizes (common while retyping on a phone): no price, never $NaN or a negative part price.
   const badQty = !(parseFloat(fs(kind).querySelector('[name=qty]').value) >= 1);
-  badSize = badQty || kind !== 'assembly' && ([...fs(kind).querySelectorAll('input[type=number]:not([name=qty]):not([name=pHoles])')].some(el => {
-    const v = parseFloat(el.value), size = ['pL', 'pW', 'pT', 'rD', 'mL', 'mW', 'mWall'].includes(el.name);
-    return el.value === '' ? size : v < 0 || (size && v <= 0);
+  // Show "1/8 in = 3.2 mm" under a field only when its unit was converted.
+  SIZES.forEach(n => { const el = qf.querySelector(`[name="${n}"]`); el.nextElementSibling.textContent = size(el).note || ''; });
+  badSize = badQty || kind !== 'assembly' && ([...fs(kind).querySelectorAll('input:not([name=qty]):not([name=pHoles])')].some(el => {
+    const sz = SIZES.includes(el.name), v = sz ? size(el).v : parseFloat(el.value), req = sz && el.name !== 'mH';
+    return el.value.trim() === '' ? req : !(v >= 0) || (req && v <= 0);
   }) || (!last.manual && !isFinite(last.total)));
   if (badSize) {
     $('#estlb').textContent = 'Estimate'; $('#tot').style.fontSize = '';
@@ -480,14 +508,17 @@ $('#sf').elements.need.addEventListener('change', needNote);
 $('#sf').elements.need.addEventListener('input', needNote);
 qf.elements.pCore.addEventListener('change', e => {
   const t = qf.elements.pT;
-  if (e.target.value === 'core' && parseFloat(t.value) < 6) { t.value = 12; render(); }
+  if (e.target.value === 'core' && size(t).v < 6) { t.value = 12; render(); }
 });
 
 function summary(){
   const s = $('#sf').elements;
   return [
     `Wyspa Build ${last.manual ? 'review' : 'quote'} request ${qid}`, '',
-    ...last.spec, `Quantity: ${last.q}`, '',
+    ...last.spec, `Quantity: ${last.q}`,
+    // Converted sizes, e.g. "Thickness 3.2 mm (typed 1/8 in)".
+    ...(kind === 'assembly' ? [] : SIZES.map(n => fs(kind).querySelector(`[name="${n}"]`)).filter(Boolean).map(el => [el, size(el)]).filter(([, r]) => r.typed)
+      .map(([el, r]) => `${el.parentNode.firstChild.textContent.replace(/\s*\(.*$/, '')} ${r.v} ${el.name === 'rD' ? 'in' : 'mm'} (typed ${r.typed})`)), '',
     ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [`Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
       ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
       `Estimate: ${usd(last.total)} (not binding)`,
@@ -497,6 +528,7 @@ function summary(){
     `Application and loads: ${s.notes.value}`, '', UPLOAD_URL ? '' : '[Attach CAD / drawings / sketch]'
   ].join('\n');
 }
+window.wyspaSummary = summary;   // read-only hook so scripts/shopper.mjs can check the email text without sending
 const mailto = () => {
   location.href = `mailto:casey@wyspa.tech?subject=${encodeURIComponent((last.manual ? 'Review request ' : 'Quote request ') + qid)}&body=${encodeURIComponent(summary())}`;
   $('#msg').textContent = `Your email app should open now. Attach your files there. If nothing opens, email casey@wyspa.tech and quote ${qid}.`;
