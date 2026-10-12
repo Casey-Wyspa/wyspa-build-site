@@ -255,16 +255,41 @@
       area += Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
       vol += (t[i] * (t[i + 4] * t[i + 8] - t[i + 5] * t[i + 7]) - t[i + 1] * (t[i + 3] * t[i + 8] - t[i + 5] * t[i + 6]) + t[i + 2] * (t[i + 3] * t[i + 7] - t[i + 4] * t[i + 6])) / 6;
     }
-    let [a, b, c] = [0, 1, 2].map(k => hi[k] - lo[k]).sort((x, y) => y - x);
+    const ext = [0, 1, 2].map(k => hi[k] - lo[k]), ax = ext.indexOf(Math.min(...ext));
+    let [a, b, c] = [...ext].sort((x, y) => y - x), s = 1;
     if (!(isFinite(a) && a > 0 && isFinite(area) && isFinite(vol))) throw new Error('bad mesh');
     vol = Math.abs(vol);
     let wall = vol > 0 ? 2 * vol / area : 0;            // thin shell: volume ≈ (area / 2) × wall
     // No units (STL) and tiny: almost certainly drawn in inches, same rule as DXF. Small-ish: ask.
-    if (U === 'assumed mm' && a < 25) { [a, b, c, wall] = [a, b, c, wall].map(v => v * 25.4); U = "assumed inches; change the size if that's wrong"; }
+    if (U === 'assumed mm' && a < 25) { s = 25.4; [a, b, c, wall] = [a, b, c, wall].map(v => v * 25.4); U = "assumed inches; change the size if that's wrong"; }
     else if (U === 'assumed mm' && a < 60) U = "read as mm; if it's in inches, fix the size";
-    if (c <= Math.max(wall * 1.5, 0.5) || c < 0.04 * b) return { kind: 'panel', L: a, W: b, T: c, units: U };
+    if (c <= Math.max(wall * 1.5, 0.5) || c < 0.04 * b) return { kind: 'panel', L: a, W: b, T: c, units: U, ...plateEdges(t, ax, c / s, s) };
     const shape = (area / 2) / (a * b);                 // mold-side surface vs. footprint
     return { kind: 'molded', L: a, W: b, H: c, wall, complex: shape > 2.5, units: U };
+  }
+
+  // Flat plate from a 3D file (B39): the side walls are the cut edges. Their area ÷ thickness = total cut length
+  // (outline + holes + cutouts); each separate ring of side wall is one outline, hole or cutout, like closed shapes in a DXF.
+  // ax = the thin axis in file units, T = thickness in file units, s = file units -> mm.
+  // Tilted or odd plates give nothing back, and the page then prices a plain rectangle as before.
+  function plateEdges(t, ax, T, s) {
+    if (!(T > 0)) return {};
+    const parent = new Map(), find = k => { while (parent.get(k) !== k) { parent.set(k, parent.get(parent.get(k))); k = parent.get(k); } return k; };
+    const q = T / 50, key = (i) => `${Math.round(t[i] / q)},${Math.round(t[i + 1] / q)},${Math.round(t[i + 2] / q)}`;
+    let side = 0;
+    for (let i = 0; i + 8 < t.length; i += 9) {
+      const ux = t[i + 3] - t[i], uy = t[i + 4] - t[i + 1], uz = t[i + 5] - t[i + 2];
+      const vx = t[i + 6] - t[i], vy = t[i + 7] - t[i + 1], vz = t[i + 8] - t[i + 2];
+      const n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx], len = Math.hypot(...n);
+      if (!(len > 0) || Math.abs(n[ax]) > 0.5 * len) continue;   // top and bottom faces
+      side += len / 2;
+      const ks = [key(i), key(i + 3), key(i + 6)];
+      ks.forEach(k => { if (!parent.has(k)) parent.set(k, k); });
+      parent.set(find(ks[1]), find(ks[0])); parent.set(find(ks[2]), find(ks[0]));
+    }
+    const rings = new Set([...parent.keys()].map(find)).size, cutM = side / T * s / 1000;
+    if (!rings || rings > 500 || !isFinite(cutM)) return {};
+    return { holes: rings - 1, cutM };
   }
 
   // ---------- wiring ----------

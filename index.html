@@ -368,7 +368,9 @@ function calc(){
     while (fit < 1000 && Math.round(price(hr * qtyMult(fit + 1), mat) * (fit + 1)) + fixed <= P.minOrder) fit++;
     lines.push([`Minimum order (${usd(P.minOrder)})`, P.minOrder - total]); total = P.minOrder;
   }
-  if (lm < 1) spec.push(`Volume discount on labor: ${Math.round((1 - lm) * 100)}%`);
+  // Same discount as the Parts line, including the "same total as 50 parts" cap (B41).
+  const em = capped ? qtyMult(nb.min) : lm;
+  if (em < 1) spec.push(`Volume discount on labor: ${Math.round((1 - em) * 100)}%`);
   return { q, total, unitP, lines, warn, spec, lead, belowMin, fit };
 }
 
@@ -398,7 +400,7 @@ function applyFile(g, file, sketch) {
     setKind('panel');
     put('pL', r(g.L)); put('pW', r(g.W));
     if (g.T > 0.2) put('pT', Math.max(0.3, +g.T.toFixed(1)));
-    put('pHoles', g.holes != null ? g.holes : 0);   // 3D files: holes aren't read, so don't price the default 4
+    put('pHoles', g.holes != null ? g.holes : 0);   // 3D flat plates: holes and cut length come from the side walls (B39); if unreadable, don't price the default 4
     fileGeo = g.cutM ? { L: r(g.L), W: r(g.W), cutM: g.cutM } : null;
     what = `${r(g.L)} × ${r(g.W)} mm${g.T > 0.2 ? ` × ${g.T.toFixed(1)} mm` : ''}${g.holes != null ? `, ${g.holes} holes` : ''}${g.cutM ? `, ${g.cutM.toFixed(1)} m of cutting` : ''}`;
   } else {
