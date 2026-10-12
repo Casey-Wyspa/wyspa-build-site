@@ -378,7 +378,7 @@ function calc(){
   return { q, total, unitP, lines, warn, spec, lead, belowMin, fit };
 }
 
-let fileGeo = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '';
+let fileGeo = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '', inchEl = null;
 // Called by autoquote.js after reading a CAD file: attach it to the request and fill in the fields.
 function applyFile(g, file, sketch) {
   const fi = $('#sf').elements.files, dt = new DataTransfer();
@@ -421,10 +421,14 @@ function applyFile(g, file, sketch) {
     put('mCx', g.complex || fileSolid ? 'complex' : span > 0 && g.H / span < 0.5 ? 'simple' : 'medium');
     what = `${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm${g.wall ? `, about ${wall} mm wall` : ''}`;
   }
+  // B44: carry a guessed-inches reading into the email while the size from the file is unchanged.
+  inchEl = /^assumed inches/.test(g.units) && (kind === 'panel' || kind === 'molded') ? qf.querySelector(`[name="${kind === 'panel' ? 'pL' : 'mL'}"]`) : null;
   render();
+  // B45: a 2D file has no thickness, so say which thickness we used.
+  const noT = kind === 'panel' && !(g.T > 0.2);
   $('#cadmsg').textContent = fileSolid
     ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part, like a blade, foil, mast or tube. These need a two-piece mold, so an engineer prices them. Send it and we'll reply with a price.`
-    : `From ${file.name}: ${what} (${g.units}). Check the fields${kind === 'panel' && !(g.T > 0.2) ? ', set the thickness' : ''}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
+    : `From ${file.name}: ${what} (${g.units}).${noT ? ` Your file has no thickness, so ${size(qf.elements.pT).v > 0 ? `it's set to ${size(qf.elements.pT).v} mm` : 'type it in'}.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
 }
 window.WB = { applyFile };
 
@@ -516,7 +520,8 @@ $('#sf').elements.need.addEventListener('change', needNote);
 $('#sf').elements.need.addEventListener('input', needNote);
 qf.elements.pCore.addEventListener('change', e => {
   const t = qf.elements.pT;
-  if (e.target.value === 'core' && size(t).v < 6) { t.value = 12; render(); }
+  // Only replace the untouched 2 mm default. A typed or file thickness stays; if it's too thin, the price box asks "Is it in inches?" (B47).
+  if (e.target.value === 'core' && t.value === t.defaultValue) { t.value = 12; render(); }
 });
 
 function summary(){
@@ -526,7 +531,8 @@ function summary(){
     ...last.spec, `Quantity: ${last.q}`,
     // Converted sizes, e.g. "Thickness 3.2 mm (typed 1/8 in)".
     ...(kind === 'assembly' ? [] : SIZES.map(n => fs(kind).querySelector(`[name="${n}"]`)).filter(Boolean).map(el => [el, size(el)]).filter(([, r]) => r.typed)
-      .map(([el, r]) => `${el.parentNode.firstChild.textContent.replace(/\s*\(.*$/, '')} ${r.v} ${el.name === 'rD' ? 'in' : 'mm'} (typed ${r.typed})`)), '',
+      .map(([el, r]) => `${el.parentNode.firstChild.textContent.replace(/\s*\(.*$/, '')} ${r.v} ${el.name === 'rD' ? 'in' : 'mm'} (typed ${r.typed})`)),
+    ...(inchEl && !inchEl.closest('fieldset').hidden && inchEl.value === inchEl.dataset.f ? [`Size from ${pricedFile}: the file has no units, so we assumed inches.`] : []), '',
     ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [`Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
       ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
       `Estimate: ${usd(last.total)} (not binding)`,
