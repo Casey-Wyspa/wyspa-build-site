@@ -66,8 +66,9 @@ window.WYSPA_PRICING = {
       medium:  { label: "Deep, or has flanges or inserts",    labor: 1.6, tool: 1.7 },
       complex: { label: "Closed or hollow (engineer quote)",  labor: 2.6, tool: 2.8 },
     },
-    hrPerPart: 1.0, trimHours: 0.5,        // prep/demold and trim per part
-    hrPerM2: 0.5, hrPerM2Ply: 0.12,        // layup per m² of surface, plus per ply
+    setupHours: 3,                         // new-mold orders: ply templates, trim fixture, first-part check
+    hrPerPart: 2.0, trimHours: 2.0,        // per part: mold prep, bag and cure; trim, sand and drill
+    hrPerM2: 1.0, hrPerM2Ply: 1.3,         // layup per m² of surface, plus per ply
     tool: { hrMin: 18, hrPerM2: 30, matPerM2: 250 },  // plug + mold; hrMin counted once, the shape's tool factor scales only the area hours (B42, 2026-10-12)
   },
 
