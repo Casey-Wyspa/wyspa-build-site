@@ -364,7 +364,7 @@ function calc(){
     mat = a * n * plyM2(val('mMat'), a * n * q); fabA = a * n * q; fabSave = a * n * m.perM2 - mat;
     // Thick wet layups cure in stages (carbon about 1,200 gsm of fabric per cure, glass its own cureGsm); each extra cure adds bagging time. Prepreg cures once.
     const cures = val('mMat') === 'prepreg' ? 1 : Math.max(1, Math.ceil(n * m.gsm / (m.cureGsm || M.wetGsmPerCure) - 1e-9));
-    hr = M.hrPerPart + M.trimHours + a * (M.hrPerM2 + n * M.hrPerM2Ply) * c.labor + (cures - 1) * (M.hrPerCure + a * M.hrPerM2 * c.labor);
+    hr = M.hrPerPart + M.trimHours + a * (M.hrPerM2 + n * (m.layHrPerM2Ply || M.hrPerM2Ply)) * c.labor + (cures - 1) * (M.hrPerCure + a * M.hrPerM2 * c.labor);
     kg = a * n * m.t * m.density;
     mat += cons(a * cures, hr);
     if (val('mTool') === 'new') nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) + (c.tool - 1) * a * M.tool.hrPerM2, a * M.tool.matPerM2 * c.tool);  // B42: minimum hours counted once; shape factor scales only the area hours
@@ -379,7 +379,7 @@ function calc(){
       else if (X.moldedMaxDepthRatio && val('mCx') !== 'complex' && H > X.moldedMaxDepthRatio * Math.min(L, W)) review.push('The part is deeper than it is wide');   // 2026-10-13: deep narrow parts need a split or closed mold
       if (n > X.maxPlies) review.push(`Wall thicker than ${+(X.maxPlies * m.t).toFixed(1)} mm`);
       // Weight check (internal): labor hours per kg far from the big-part reference means the layup is unusual for its size.
-      const hk = hr / kg, HK = X.moldedHrPerKg;
+      const hk = hr / kg, HK = (val('mMat') === 'glass' && X.moldedHrPerKgGlass) || X.moldedHrPerKg;
       if (HK && kg >= (X.moldedHrPerKgMinKg || 0) && (hk < HK[0] || hk > HK[1])) review.push(hk < HK[0] ? 'Wall is too thick for this size' : 'Wall is too thin for this size');   // few hours per kg = a heavy, thick wall
       // Small, thick parts (e.g. a 60 g bracket with a 3.4 mm wall): a shop would press-mold or machine them, not bag them wet in 3 cures.
       if (X.moldedSmallKg && kg < X.moldedSmallKg && n * m.gsm > X.moldedSmallGsm) review.push('Small, thick molded part');
