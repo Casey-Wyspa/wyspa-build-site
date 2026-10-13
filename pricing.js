@@ -52,9 +52,10 @@ window.WYSPA_PRICING = {
       gloss: { label: "Gloss one side",   perM2: 15, hrPerM2: 0.6 },
       clear: { label: "Clear coat",    perM2: 30, hrPerM2: 1.2 },
     },
-    hrPerM2Ply: 0.08,         // layup per m² per ply
+    hrPerM2Ply: 0.08,         // layup per m² per ply. Checked 2026-10-13: 1.9x NREL's flat shear-web rate (24 m²/h/person = 0.042), below its root preform (8 m²/h = 0.125)
     hrPerPart: 0.2,           // demold, inspect, handle
-    hrPerMCut: 0.06,          // CNC routing per meter of perimeter
+    hrPerMCut: 0.09,          // per meter of cut edge: CNC rough + finish pass 0.052 h/m (Amana CFRP chart, 1/4 in bit 23 + 28 in/min, one pass to 6.35 mm)
+                              //   + hand edge trim/deburr 0.033 h/m (NREL blade cost model, shear-web trim 30 m/h/person); build_work/research/pricing/panel-hours-2026-10-13.md
     hrPerHole: 0.02,
     setupHours: 1.5,          // per order: CNC program + fixture
     maxSize: [2400, 1200],    // mm, largest sheet partner builders press
