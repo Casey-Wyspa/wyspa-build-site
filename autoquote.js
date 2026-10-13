@@ -265,14 +265,21 @@
     const ext = [0, 1, 2].map(k => hi[k] - lo[k]), ax = ext.indexOf(Math.min(...ext));
     let [a, b, c] = [...ext].sort((x, y) => y - x), s = 1;
     if (!(isFinite(a) && a > 0 && isFinite(area) && isFinite(vol))) throw new Error('bad mesh');
+    // B68: closed shell (every edge used twice) = outside + inside + rim, so one side is half; an open surface is one side already.
+    const q = a * 1e-5, key = i => `${Math.round(t[i] / q)},${Math.round(t[i + 1] / q)},${Math.round(t[i + 2] / q)}`, edges = new Map();
+    for (let i = 0; i + 8 < t.length; i += 9) {
+      const k = [key(i), key(i + 3), key(i + 6)];
+      for (let j = 0; j < 3; j++) { const e = [k[j], k[(j + 1) % 3]].sort().join('|'); edges.set(e, (edges.get(e) || 0) + 1); }
+    }
+    const oneSide = [...edges.values()].some(v => v === 1) ? area : area / 2;
     vol = Math.abs(vol);
     let wall = vol > 0 ? 2 * vol / area : 0;            // thin shell: volume ≈ (area / 2) × wall
     // No units (STL) and tiny: almost certainly drawn in inches, same rule as DXF. Small-ish: ask.
     if (U === 'assumed mm' && a < 25) { s = 25.4; [a, b, c, wall] = [a, b, c, wall].map(v => v * 25.4); U = "assumed inches; change the size if that's wrong"; }
     else if (U === 'assumed mm' && a < 60) U = "read as mm; if it's in inches, fix the size";
     if (c <= Math.max(wall * 1.5, 0.5) || c < 0.04 * b) return { kind: 'panel', L: a, W: b, T: c, units: U, ...plateEdges(t, ax, c / s, s) };
-    const shape = (area / 2) / (a * b);                 // mold-side surface vs. footprint
-    return { kind: 'molded', L: a, W: b, H: c, wall, complex: shape > 2.5, units: U };
+    const m2 = oneSide * s * s / 1e6, shape = m2 * 1e6 / (a * b);   // mold-side surface (m²) vs. footprint
+    return { kind: 'molded', L: a, W: b, H: c, wall, m2, complex: shape > 2.5, units: U };
   }
 
   // Flat plate from a 3D file (B39): the side walls are the cut edges. Their area ÷ thickness = total cut length

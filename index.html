@@ -360,7 +360,7 @@ function calc(){
     const m = P.plies[val('mMat')], c = P.molded.complexity[cx.value], M = P.molded;
     // Wall thickness in mm -> whole plies of the chosen fabric, rounded up
     const wall = val('mWall') || 1, n = Math.max(1, Math.ceil(wall / m.t - 1e-9));
-    const a = (L * W + 2 * H * (L + W)) / 1e6;
+    const fromFile = fileSurf && fileSurf.L === L && fileSurf.W === W && fileSurf.H === H, a = fromFile ? fileSurf.m2 : (L * W + 2 * H * (L + W)) / 1e6;   // B68: the file's own surface while its sizes are unchanged
     mat = a * n * plyM2(val('mMat'), a * n * q); fabA = a * n * q; fabSave = a * n * m.perM2 - mat;
     // Thick wet layups cure in stages (about 1,200 gsm of fabric per cure); each extra cure adds bagging time. Prepreg cures once.
     const cures = val('mMat') === 'prepreg' ? 1 : Math.max(1, Math.ceil(n * m.gsm / M.wetGsmPerCure - 1e-9));
@@ -389,7 +389,7 @@ function calc(){
       wallQ = wall < 0.5 && wEl.value === wEl.dataset.f;
       if (wall < 0.5) review.push(`Wall under 0.5 mm. ${wallQ ? 'Is the file in inches?' : `Is it in inches?${typedIn('mWall')}`}`);
     }
-    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${+a.toPrecision(3)} m² surface), ${wallQ ? 'wall to confirm' : `${wall} mm wall (${n} ${n === 1 ? 'ply' : 'plies'})`}, ${m.label}, ${c.label}, ${nre ? 'new mold' : 'repeat order, our existing mold'}`);
+    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${+a.toPrecision(3)} m² ${fromFile ? 'surface, measured from your file' : 'surface, estimated from your dimensions'}), ${wallQ ? 'wall to confirm' : `${wall} mm wall (${n} ${n === 1 ? 'ply' : 'plies'})`}, ${m.label}, ${c.label}, ${nre ? 'new mold' : 'repeat order, our existing mold'}`);
   } else {
     const txt = n => fs('assembly').querySelector(`[name="${n}"]`).value.trim();
     review.push('Assembly');
@@ -431,7 +431,7 @@ function calc(){
   return { q, total, unitP, lines, warn, spec, lead, belowMin, fit, only, wt, kg, hr, underMin: !!only && total < P.minOrder };
 }
 
-let fileGeo = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '', unitEl = null, unitAs = 'mm';
+let fileGeo = null, fileSurf = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '', unitEl = null, unitAs = 'mm';
 const readFiles = new Map(), inch = mm => +(mm / 25.4).toFixed(2);
 // Called by autoquote.js after reading a CAD file: attach it to the request and fill in the fields.
 function applyFile(g, file, sketch) {
@@ -450,6 +450,7 @@ function applyFile(g, file, sketch) {
     + (g.holes != null && g.kind === 'panel' ? `, ${g.holes} hole${g.holes === 1 ? '' : 's'}` : '') + (g.kind === 'molded' && g.wall ? (g.wall < 0.5 ? ', wall to confirm' : `, about ${Math.ceil(g.wall * 10 - 1e-9) / 10} mm wall`) : ''));
   if (!g) return render();
   pricedFile = file.name;
+  fileSurf = g.kind === 'molded' && g.m2 > 0 ? { L: Math.round(g.L), W: Math.round(g.W), H: Math.round(g.H), m2: g.m2 } : null;   // B68: the file's real surface
   // data-f marks a value that came from the file, so the typed-in-inches checks (B36) skip it.
   const r = Math.round, put = (n, v) => { const el = qf.querySelector(`[name="${n}"]`); el.value = v; el.dataset.f = el.value; };
   let what;
