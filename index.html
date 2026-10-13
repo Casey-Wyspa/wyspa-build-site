@@ -361,6 +361,9 @@ function calc(){
       if (H > X.moldedMaxDepth) review.push(`Deeper than ${X.moldedMaxDepth} mm`);
       else if (X.moldedMaxDepthRatio && val('mCx') !== 'complex' && H > X.moldedMaxDepthRatio * Math.min(L, W)) review.push('The part is deeper than it is wide');   // 2026-10-13: deep narrow parts need a split or closed mold
       if (n > X.maxPlies) review.push(`Wall thicker than ${+(X.maxPlies * m.t).toFixed(1)} mm`);
+      // Weight check (internal): labor hours per kg far from the big-part reference means the layup is unusual for its size.
+      const hk = hr / kg, HK = X.moldedHrPerKg;
+      if (HK && kg >= (X.moldedHrPerKgMinKg || 0) && (hk < HK[0] || hk > HK[1])) review.push('Wall very thick or very thin for this size');
       review.push(...[small('mL', 'Length', 25), small('mW', 'Width', 25)].filter(Boolean));
       // B37: only blame the file when the wall came from one.
       const wEl = fs('molded').querySelector('[name=mWall]');
