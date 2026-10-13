@@ -137,7 +137,9 @@
       grow(groups.get(r).bb, g[4].bb); groups.get(r).len += g[4].len;
     });
     // No units in the file and a part this small: almost certainly drawn in inches.
-    let units = uc ? 'units from file' : 'assumed mm';
+    // B57: name the file's unit ("file says inches"), so the size can be shown in it.
+    const un = { 1: 'inches', 2: 'feet', 4: 'mm', 5: 'cm', 6: 'm' }[uc];
+    let units = uc ? (un ? `file says ${un}` : 'units from file') : 'assumed mm';
     if (!uc && Math.max(bb[2] - bb[0], bb[3] - bb[1]) * scale < 25) { scale = 25.4; units = "assumed inches; change the size if that's wrong"; }
     // Still the size of a drawing sheet (ISO A0-A4, ANSI A-E) with a closed frame: price the largest loop inside
     // the frame if it has holes in it or stray title-block lines are left; otherwise keep the frame and ask.
@@ -157,7 +159,7 @@
       } else units += '; this may be the drawing sheet, not the part';
     }
     const [x0, y0, x1, y1] = part.bb, holes = inner.filter(s => s.closed).length - (part.bb === bb ? 1 : 0);
-    return { kind: 'panel', L: (x1 - x0) * scale, W: (y1 - y0) * scale, cutM: part.len * scale / 1000, holes: Math.max(0, holes), units };
+    return { kind: 'panel', L: (x1 - x0) * scale, W: (y1 - y0) * scale, cutM: part.len * scale / 1000, holes: Math.max(0, holes), units, inch: uc === 1 };
   }
 
   // ---------- 3D meshes ----------
