@@ -440,6 +440,10 @@ const est = new Map();
 const combo = () => { const fl = cadNames().filter(n => est.has(n)); if (!last.only || fl.length < 2 || !fl.includes(pricedFile)) return null;
   return { t: fl.reduce((s, n) => s + est.get(n).sub, 0) - (fl.length - 1) * Math.round(price(P.reviewHours, 0)), txt: fl.map(n => `${n} × ${est.get(n).q}`).join(', ') }; };
 const comboLine = C => `All your files: about ${usd(C.t)} (${C.txt}).`;
+// B99: each tab remembers the last file priced on it, and each file keeps what was read from it (mesh surface, cut length,
+// solid, unit guess, file message). Clicking a tab brings that file back with its own fields and quantity, not the last file's.
+const tabFile = {}, fileCtx = new Map();
+const QNOTE = / Quantity is still \S+ from your last part\. Change it if needed\./;   // B101: dropped once the quantity is edited
 // Called by autoquote.js after reading a CAD file: attach it to the request and fill in the fields.
 function applyFile(g, file, sketch) {
   const fi = $('#sf').elements.files, dt = new DataTransfer();
@@ -457,7 +461,7 @@ function applyFile(g, file, sketch) {
     + (g.holes != null && g.kind === 'panel' ? `, ${g.holes} hole${g.holes === 1 ? '' : 's'}` : '') + (g.kind === 'molded' && g.wall ? (g.wall < 0.5 ? ', wall to confirm' : `, about ${Math.ceil(g.wall * 10 - 1e-9) / 10} mm wall`) : ''));
   if (!g) return render();
   // B89: a new part keeps the quantity on screen (a default would be just as much a guess), and the file message says what it is.
-  const newPart = !!pricedFile && pricedFile !== file.name;
+  const newPart = [...fileCtx.keys()].some(n => n !== file.name && cadNames().includes(n));
   pricedFile = file.name;
   fileSurf = g.kind === 'molded' && g.m2 > 0 ? { L: Math.round(g.L), W: Math.round(g.W), H: Math.round(g.H), m2: g.m2 } : null;   // B68: the file's real surface
   // data-f marks a value that came from the file, so the typed-in-inches checks (B36) skip it.
@@ -470,7 +474,7 @@ function applyFile(g, file, sketch) {
   } else if (kind === 'assembly') {
     what = `${r(g.L)} × ${r(g.W)} mm overall`;
   } else if (g.kind === 'panel') {
-    setKind('panel');
+    setKind('panel', true);
     put('pL', r(g.L)); put('pW', r(g.W));
     if (g.T > 0.2) put('pT', Math.max(0.3, +g.T.toFixed(1)));
     put('pHoles', g.holes != null ? g.holes : 0);   // 3D flat plates: holes and cut length come from the side walls (B39); if unreadable, 0
@@ -478,7 +482,7 @@ function applyFile(g, file, sketch) {
     // B57: an inch file's size is shown in inches first: "36 × 24 in (914 × 610 mm)". The fields stay in mm.
     what = `${g.inch ? `${inch(g.L)} × ${inch(g.W)} in (${r(g.L)} × ${r(g.W)} mm)` : `${r(g.L)} × ${r(g.W)} mm`}${g.T > 0.2 ? ` × ${g.T.toFixed(1)} mm` : ''}${g.holes != null ? `, ${g.holes} holes` : ''}${g.cutM ? `, ${g.cutM.toFixed(1)} m of cutting` : ''}`;
   } else {
-    setKind('molded');
+    setKind('molded', true);
     // Keep the buyer's Mold choice: a repeat customer who uploads a file still has our mold (B35).
     put('mL', r(g.L)); put('mW', r(g.W)); put('mH', r(g.H));
     const wall = Math.max(0.2, Math.ceil((g.wall || 1) * 10 - 1e-9) / 10);
@@ -501,11 +505,14 @@ function applyFile(g, file, sketch) {
   if (noT && t.value === t.defaultValue) t.dataset.d = t.value; else delete t.dataset.d;
   // B58: a thickness the buyer typed is echoed as typed ("your 1/8 in"), not as if the site chose it.
   const tMsg = !(tv > 0) ? 'type it in' : t.dataset.d ? `it's set to ${tv} mm` : `we used the ${t.value.trim()}${size(t).bare ? ' mm' : ''} you typed`;
-  pricedKind = kind;
+  pricedKind = kind; tabFile[kind] = file.name;
+  const ctx = { fileSurf, fileGeo, fileSolid, unitEl, unitAs, msg: '' };
+  fileCtx.set(file.name, ctx);
   render();
   $('#cadmsg').textContent = fileSolid
     ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part, like a blade, foil, mast or tube. These need a two-piece mold, so an engineer prices them. Send it and we'll reply with a price.`
     : `From ${file.name}: ${what} (${g.units}).${newPart ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
+  ctx.msg = $('#cadmsg').textContent.replace(QNOTE, '');
 }
 // B88: the upload server (upload-script/Code.gs OK_EXT) only saves these types; keep the two lists the same.
 // Anything else (HEIC, WebP, GIF, Word...) used to be dropped without a word, so refuse it here instead.
@@ -602,11 +609,18 @@ function draw(){
   $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...(last.only && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
-function setKind(k){
+function setKind(k, byFile){
+  // B99: a tab click goes back to the file last priced on that tab, with its own quantity and what was read from it.
+  const f = !byFile && k !== kind && tabFile[k], back = f && fileCtx.has(f) && cadNames().includes(f);
+  if (back) {
+    const c = fileCtx.get(f);
+    pricedFile = f; pricedKind = k; ({ fileSurf, fileGeo, fileSolid, unitEl, unitAs } = c);
+    $('#cadmsg').textContent = c.msg;
+  } else if (!byFile && k !== kind && pricedFile) { pricedFile = ''; pricedKind = ''; }   // a tab with no file: a typed part, not the last file's
   // Keep a quantity the buyer typed when the tab changes (by click or by an uploaded file).
   const q0 = kind && fs(kind) && fs(kind).querySelector('[name=qty]'), q1 = fs(k).querySelector('[name=qty]');
   // B51: a typed quantity stays even if it equals the default (data-t is set when the box is typed in).
-  if (q0 && q0 !== q1 && (q0.dataset.t || q0.value !== q0.defaultValue)) { q1.value = q0.value; q1.dataset.t = q0.dataset.t || ''; }
+  if (!back && q0 && q0 !== q1 && (q0.dataset.t || q0.value !== q0.defaultValue)) { q1.value = q0.value; q1.dataset.t = q0.dataset.t || ''; }
   kind = k;
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.k === k));
   qf.querySelectorAll('fieldset').forEach(f => f.hidden = f.dataset.k !== k);
@@ -615,7 +629,8 @@ function setKind(k){
   render();
 }
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setKind(b.dataset.k));
-qf.addEventListener('input', e => { if (e.target.name === 'qty' || e.target.name === 'mCx') e.target.dataset.t = 1; delete e.target.dataset.d; needSize = false; render(); });
+qf.addEventListener('input', e => { if (e.target.name === 'qty' || e.target.name === 'mCx') e.target.dataset.t = 1;
+  if (e.target.name === 'qty') $('#cadmsg').textContent = $('#cadmsg').textContent.replace(QNOTE, ''); delete e.target.dataset.d; needSize = false; render(); });
 // No past dates in Need by (B33).
 { const t = new Date(); $('#sf').elements.need.min = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; }
 $('#sf').elements.need.addEventListener('change', needNote);
