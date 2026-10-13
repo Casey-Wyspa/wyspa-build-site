@@ -579,7 +579,10 @@ function draw(){
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
   const plain = kind === 'panel' && !$('#sf').elements.files.files.length ? [`This price is for a plain rectangle${parseFloat(qf.elements.pHoles.value) > 0 ? ' with holes' : ''}. Send a drawing to price cutouts and shaped edges.`] : [];
-  $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...last.warn, ...(last.underMin ? [`Minimum order is ${usd(P.minOrder)} for all files combined.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+  // Honest pointer (market check 2026-10-13): plain solid sheet and stock prop sizes cost less from a catalog. Page only, not the email.
+  const fit2 = kind === 'panel' && val('pCore') !== 'core' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
+    : kind === 'rotor' && val('rGeo') === 'new' ? ["A stock prop size will cost less from a catalog. We're best for custom rotors."] : [];
+  $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...(last.underMin ? [`Minimum order is ${usd(P.minOrder)} for all files combined.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 function setKind(k){
