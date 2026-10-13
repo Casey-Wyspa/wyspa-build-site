@@ -506,13 +506,12 @@ function applyFile(g, file, sketch) {
   if (noT && t.value === t.defaultValue) t.dataset.d = t.value; else delete t.dataset.d;
   // B58: a thickness the buyer typed is echoed as typed ("your 1/8 in"), not as if the site chose it.
   const tMsg = !(tv > 0) ? 'type it in' : t.dataset.d ? `it's set to ${tv} mm` : `we used the ${t.value.trim()}${size(t).bare ? ' mm' : ''} you typed`;
-  pricedKind = kind; tabFile[kind] = file.name;
-  const ctx = { fileSurf, fileGeo, fileSolid, unitEl, unitAs, msg: '' };
-  fileCtx.set(file.name, ctx);
+  const ctx = { fileSurf, fileGeo, fileSolid, unitEl, unitAs, msg: '', g };
+  pricedKind = kind; tabFile[kind] = { f: file.name, c: ctx }; fileCtx.set(file.name, ctx);
   render();
   $('#cadmsg').textContent = fileSolid
     ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part, like a blade, foil, mast or tube. These need a two-piece mold, so an engineer prices them. Send it and we'll reply with a price.`
-    : `From ${file.name}: ${what} (${g.units}).${newPart ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
+    : `From ${file.name}: ${what} (${g.units}).${newPart ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
   ctx.msg = $('#cadmsg').textContent.replace(QNOTE, '');
 }
 // B88: the upload server (upload-script/Code.gs OK_EXT) only saves these types; keep the two lists the same.
@@ -595,29 +594,32 @@ function draw(){
     return;
   }
   // B100: with 2+ priced files the big number is the order total, ready when its slowest part is; this file's price is the small line.
-  const C = combo(), each = `${usd(last.total / last.q)} each`;
+  const C = combo(), each = usd(last.total / last.q);
   if (C) $('#estlb').textContent = 'Estimate for all your files';
-  $('#tot').textContent = usd(C ? C.t : last.total);
-  $('#per').textContent = C ? `${C.txt} · All ready about ${readyRange(C.lead)} if you approve today. ${last.only}: ${usd(last.total)}, ${each}.`
-    : `${each}, all in · Ready about ${readyRange()} if you approve today${last.only ? '. We\'ll send one price for all your files. The review and minimum apply once.' : ''}`;
+  $('#tot').textContent = usd(C ? Math.max(C.t, P.minOrder) : last.total);   // the minimum is per order, so that's what 2+ files below it cost
+  $('#per').textContent = C ? `${C.txt} · All ready about ${readyRange(C.lead)} if you approve today · ${last.only}: ${usd(last.total)} (${each} each)`
+    : `${each} each, all in · Ready about ${readyRange()} if you approve today${last.only ? '. We\'ll send one price for all your files. The review and minimum apply once.' : ''}`;
   $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${last.only ? `Total for ${last.only}` : 'Total'}</td><td class="n">${usd(last.total)}</td></tr>`;
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
-  const noFile = kind === 'panel' && !$('#sf').elements.files.files.length, holes = parseFloat(qf.elements.pHoles.value) > 0;
+  const typed = !$('#sf').elements.files.files.length, noFile = kind === 'panel' && typed, holes = parseFloat(qf.elements.pHoles.value) > 0;
   const plain = noFile ? [`This price is for a plain rectangle${holes ? ' with holes' : ''}. Send a drawing to price cutouts and shaped edges.`] : [];
   // Honest pointer (market check 2026-10-13): plain solid sheet and stock prop sizes cost less from a catalog. Page only, not the email.
   // B93: only for a typed plain rectangle (no file, no holes); a cut part is custom. B103: carbon and glass (G-10) plate are
   // stock catalog items; carbon + glass sheet isn't, so no line for it.
   const fit2 = noFile && !holes && val('pCore') !== 'core' && val('pMat') !== 'hybrid' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
     : kind === 'rotor' && val('rGeo') === 'new' ? ["A stock-size prop usually costs less from a catalog. We're best for custom rotors."] : [];
-  $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...(last.only && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+  $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...(last.only && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}${typed ? ' More than one part? Send each one. We\'ll price them together as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 function setKind(k, byFile){
   // B99: a tab click goes back to the file last priced on that tab, with its own quantity and what was read from it.
-  const f = !byFile && k !== kind && tabFile[k], back = f && fileCtx.has(f) && cadNames().includes(f);
+  const t = !byFile && k !== kind && tabFile[k], f = t && t.f, back = f && cadNames().includes(f);
+  // B104: Flat or Molded with no file of its own takes the size of the 3D file just read, never the defaults.
+  const g = !byFile && !back && k !== kind && pricedFile && /^(panel|molded)$/.test(k) && fileCtx.get(pricedFile)?.g, fo = g && [...$('#sf').elements.files.files].find(x => x.name === pricedFile);
+  if (fo && (g.H || g.T) > 0) return applyFile(k === 'panel' ? { ...g, kind: k, T: g.wall, m2: 0 } : { ...g, kind: k, H: g.H || g.T, wall: 0 }, fo);
   if (back) {
-    const c = fileCtx.get(f);
+    const c = t.c;
     pricedFile = f; pricedKind = k; ({ fileSurf, fileGeo, fileSolid, unitEl, unitAs } = c);
     $('#cadmsg').textContent = c.msg;
   } else if (!byFile && k !== kind && pricedFile) { pricedFile = ''; pricedKind = ''; }   // a tab with no file: a typed part, not the last file's

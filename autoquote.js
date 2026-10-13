@@ -251,7 +251,7 @@
   function fromMesh(t, U = 'assumed mm') {
     if (t.length < 9) throw new Error('empty mesh');
     const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
-    let area = 0, vol = 0;
+    let area = 0, vol = 0; const S = [0, 0, 0];   // S: sum of the triangles' area vectors, zero for a closed surface
     for (let i = 0; i + 8 < t.length; i += 9) {
       let ok = true;
       for (let j = 0; j < 9; j++) if (!isFinite(t[i + j])) ok = false;
@@ -259,7 +259,8 @@
       for (let j = 0; j < 9; j++) { const a = j % 3; lo[a] = Math.min(lo[a], t[i + j]); hi[a] = Math.max(hi[a], t[i + j]); }
       const ux = t[i + 3] - t[i], uy = t[i + 4] - t[i + 1], uz = t[i + 5] - t[i + 2];
       const vx = t[i + 6] - t[i], vy = t[i + 7] - t[i + 1], vz = t[i + 8] - t[i + 2];
-      area += Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
+      const n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+      area += Math.hypot(...n) / 2; n.forEach((v, k) => S[k] += v / 2);
       vol += (t[i] * (t[i + 4] * t[i + 8] - t[i + 5] * t[i + 7]) - t[i + 1] * (t[i + 3] * t[i + 8] - t[i + 5] * t[i + 6]) + t[i + 2] * (t[i + 3] * t[i + 7] - t[i + 4] * t[i + 6])) / 6;
     }
     const ext = [0, 1, 2].map(k => hi[k] - lo[k]), ax = ext.indexOf(Math.min(...ext));
@@ -273,7 +274,9 @@
     }
     const oneSide = [...edges.values()].some(v => v === 1) ? area : area / 2;
     vol = Math.abs(vol);
-    let wall = vol > 0 ? 2 * vol / area : 0;            // thin shell: volume ≈ (area / 2) × wall
+    // B104: an open surface (a Rhino cover exported as a surface) has no volume or wall; its "volume" depends on where the origin is.
+    // Tested by shape, not shared edges, since STEP faces are meshed apart even on a closed solid.
+    let wall = vol > 0 && Math.hypot(...S) < 0.1 * area ? 2 * vol / area : 0;   // thin shell: volume ≈ (area / 2) × wall
     // No units (STL) and tiny: almost certainly drawn in inches, same rule as DXF. Small-ish: ask.
     if (U === 'assumed mm' && a < 25) { s = 25.4; [a, b, c, wall] = [a, b, c, wall].map(v => v * 25.4); U = "assumed inches; change the size if that's wrong"; }
     else if (U === 'assumed mm' && a < 60) U = "read as mm; if it's in inches, fix the size";
