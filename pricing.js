@@ -19,14 +19,15 @@ window.WYSPA_PRICING = {
   ],
 
   // Raw material cost per m² per ply (fabric + resin), cured ply thickness t in mm, fabric gsm per mm of cured laminate.
-  // 2026-10-10: Fibre Glast list prices x1.2 cutting scrap + epoxy at $39.81/kg x1.5 waste; t from Wyspa laminate engine
+  // 2026-10-10: Fibre Glast list prices + epoxy at $39.81/kg x1.5 waste; t from Wyspa laminate engine
   // (Vf 0.50 carbon, 0.45 glass, 0.55 prepreg). Sources: build_work/research/material-costs.md
+  // 2026-10-13: cutting scrap x1.2 -> x1.3 (Wyspa's own cost model); prepreg from ACP list (Fibre Glast was the high outlier)
   plies: {
-    carbon:  { label: "Carbon fiber",   gsm: 200, t: 0.22, gsmPerMm: 900,  perM2: 65,       // 3K 2x2 twill
-               bulk: { gsm: 670, t: 0.75, perM2mm: 155 } },   // heavy 12K twill for the inside of thick laminates, $ per m² per mm
-    prepreg: { label: "Carbon (prepreg)", gsm: 200, t: 0.20, gsmPerMm: 1000, perM2: 169 },    // 3K twill prepreg, $163.86/yd list
-    glass:   { label: "Fiberglass",     gsm: 300, t: 0.26, gsmPerMm: 1140, perM2: 26 },     // 7781 E-glass
-    hybrid:  { label: "Carbon + glass", gsm: 250, t: 0.24, gsmPerMm: 1040, perM2: 46 },     // average of one carbon + one 7781 ply
+    carbon:  { label: "Carbon fiber",   gsm: 200, t: 0.22, gsmPerMm: 900,  perM2: 70,       // 3K 2x2 twill
+               bulk: { gsm: 670, t: 0.75, perM2mm: 165 } },   // heavy 12K twill for the inside of thick laminates, $ per m² per mm
+    prepreg: { label: "Carbon (prepreg)", gsm: 200, t: 0.20, gsmPerMm: 1000, perM2: 137 },    // 3K twill prepreg, ACP $122/yd list x1.3 scrap
+    glass:   { label: "Fiberglass",     gsm: 300, t: 0.26, gsmPerMm: 1140, perM2: 28 },     // 7781 E-glass
+    hybrid:  { label: "Carbon + glass", gsm: 250, t: 0.24, gsmPerMm: 1040, perM2: 49 },     // average of one carbon + one 7781 ply
   },
   consumablesPerM2: 20,       // peel ply, bag, breather, release, per m² of part per cure
 
@@ -67,7 +68,7 @@ window.WYSPA_PRICING = {
     },
     hrPerPart: 1.0, trimHours: 0.5,        // prep/demold and trim per part
     hrPerM2: 0.5, hrPerM2Ply: 0.12,        // layup per m² of surface, plus per ply
-    tool: { hrMin: 16, hrPerM2: 30, matPerM2: 250 },  // plug + mold; hrMin counted once, the shape's tool factor scales only the area hours (B42, 2026-10-12)
+    tool: { hrMin: 18, hrPerM2: 30, matPerM2: 250 },  // plug + mold; hrMin counted once, the shape's tool factor scales only the area hours (B42, 2026-10-12)
   },
 
   // Anything past these limits gets no instant price; it goes to engineer review instead
@@ -78,6 +79,7 @@ window.WYSPA_PRICING = {
     rotorMaxBlades: 3,
     moldedMaxDim: 1500,       // mm, longest side
     moldedMaxDepth: 400,      // mm
+    moldedMaxDepthRatio: 1.0, // depth over the shorter side; deeper parts need a split mold (closed-tool evidence, 2026-10-13)
     maxPlies: 20,
     panelMaxSolidT: 10,       // mm, solid laminate (cure heat, voids, press size)
     minSkin: 0.4,             // mm, cored panel skin (2 plies)

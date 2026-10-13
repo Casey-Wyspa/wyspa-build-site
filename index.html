@@ -345,6 +345,7 @@ function calc(){
       if (val('mCx') === 'complex') review.push('Closed or split mold, undercuts');
       if (Math.max(L, W) > X.moldedMaxDim) review.push(`Longer than ${X.moldedMaxDim} mm`);
       if (H > X.moldedMaxDepth) review.push(`Deeper than ${X.moldedMaxDepth} mm`);
+      else if (X.moldedMaxDepthRatio && val('mCx') !== 'complex' && H > X.moldedMaxDepthRatio * Math.min(L, W)) review.push('Deeper than it is wide');   // 2026-10-13: deep narrow parts need a split or closed mold
       if (n > X.maxPlies) review.push(`Wall thicker than ${+(X.maxPlies * m.t).toFixed(1)} mm`);
       review.push(...[small('mL', 'Length', 25), small('mW', 'Width', 25)].filter(Boolean));
       // B37: only blame the file when the wall came from one.
