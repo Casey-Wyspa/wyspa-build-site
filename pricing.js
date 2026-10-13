@@ -24,12 +24,21 @@ window.WYSPA_PRICING = {
   // 2026-10-13: cutting scrap x1.2 -> x1.3 (Wyspa's own cost model); prepreg from ACP list (Fibre Glast was the high outlier)
   // density: cured laminate g/cm³, for part weight (laminate engine: carbon fiber 1.80, E-glass 2.54, epoxy 1.08, prepreg resin 1.10 g/cm³ at the Vf above;
   //   checks: 2 mm carbon 2.88 kg/m², 2.1 mm glass 3.65 kg/m², 1.94 mm hybrid 3.11 kg/m²; research/pricing/laminate-calibration.md)
+  // fab: the fabric part of perM2 (list price x1.3 scrap; the rest is resin, not discounted).
+  // vol: fabric volume prices, [m² of this fabric in the whole order (net, before scrap), price factor]. The order pays the cheapest option,
+  //   buying up to a break if that costs less, so a bigger order never pays more for fabric. Breaks = supplier yardage / 1.3 scrap
+  //   (10 yd = 9 m², 50 yd = 45 m², 100 yd = 90 m²). 2026-10-13 cycle 22, sources in build_work/research/material-costs.md.
   plies: {
     carbon:  { label: "Carbon fiber",   gsm: 200, t: 0.22, gsmPerMm: 900,  perM2: 70, density: 1.44,      // 3K 2x2 twill
-               bulk: { gsm: 670, t: 0.75, perM2mm: 165 } },   // heavy 12K twill for the inside of thick laminates, $ per m² per mm
-    prepreg: { label: "Carbon (prepreg)", gsm: 200, t: 0.20, gsmPerMm: 1000, perM2: 137, density: 1.49 },    // 3K twill prepreg, ACP $122/yd list x1.3 scrap
-    glass:   { label: "Fiberglass",     gsm: 300, t: 0.26, gsmPerMm: 1140, perM2: 28, density: 1.74 },     // 7781 E-glass
-    hybrid:  { label: "Carbon + glass", gsm: 250, t: 0.24, gsmPerMm: 1040, perM2: 49, density: 1.60 },     // average of one carbon + one 7781 ply
+               fab: 62.8, vol: [[45, 0.82]],                  // Fibre Glast $56.18/yd (10 yd cut) -> Rock West 50 yd roll $45.96/yd
+               bulk: { gsm: 670, t: 0.75, perM2mm: 165,       // heavy 12K twill for the inside of thick laminates, $ per m² per mm
+                       fabPerMm: 132, vol: [[45, 0.70]] } },  // Fibre Glast $88/yd (10 yd cut) -> Rock West 50 yd roll $60.68/yd
+    prepreg: { label: "Carbon (prepreg)", gsm: 200, t: 0.20, gsmPerMm: 1000, perM2: 137, density: 1.49,      // 3K twill prepreg, ACP $122/yd list x1.3 scrap
+               fab: 136.6, vol: [[4.5, 0.90], [9, 0.80], [45, 0.75]] },  // ACP 5-9 yd $109.80, 10-49 yd $97.60, 50+ yd $91.50
+    glass:   { label: "Fiberglass",     gsm: 300, t: 0.26, gsmPerMm: 1140, perM2: 28, density: 1.74,       // 7781 E-glass
+               fab: 17.7, vol: [[9, 0.87], [90, 0.83]] },     // Fibre Glast $15.86/yd -> Aircraft Spruce $13.65/yd; Rock West 100 yd roll $13.09/yd
+    hybrid:  { label: "Carbon + glass", gsm: 250, t: 0.24, gsmPerMm: 1040, perM2: 49, density: 1.60,       // average of one carbon + one 7781 ply
+               mix: ["carbon", "glass"] },                    // half the area on each fabric's volume prices
   },
   consumablesPerM2: 20,       // peel ply, bag, breather, release, per m² of part per cure: the floor
   consumablesPerHour: 15,     // consumables per part labor hour, as a composite shop billed them (2025 invoice, actual); the larger of the two is used

@@ -296,18 +296,27 @@ function calc(){
   // Consumables: per part labor hour, never less than the per-m² bag materials (2026-10-13).
   const cons = (m2, h) => Math.max(m2 * P.consumablesPerM2, h * (P.consumablesPerHour || 0));
   let hr = 0, mat = 0, nre = 0, setup = 0, lead, kg = 0, cut = false;   // kg: finished part weight from the laminate (areal weight x area, plus core)
+  // Fabric volume prices by order size (2026-10-13): price factor for A m² of one fabric in the whole order. The cheapest break wins,
+  // buying up to it if that costs less, so ordering more never raises the fabric bill. Resin, core and consumables keep list prices.
+  const vm = (v, A) => A > 0 && v ? Math.min(1, ...v.map(([t, k]) => Math.max(A, t) * k / A)) : 1;
+  const plyM2 = (key, A) => { const m = P.plies[key]; return m.mix ? m.mix.reduce((s, k) => s + plyM2(k, A / m.mix.length), 0) / m.mix.length : m.perM2 - (m.fab || 0) * (1 - vm(m.vol, A)); };
+  let fabA = 0, fabSave = 0;   // fabric m² in the order; $ saved per part (email note only)
   if (kind === 'panel') {
     const L = val('pL'), W = val('pW'), T = val('pT'), holes = Math.max(0, Math.round(val('pHoles') || 0)), m = P.plies[val('pMat')], cored = val('pCore') === 'core', f = P.panel.finish[val('pFin')], C = P.panel;
     // Core = total minus both skins.
     const skin = cored ? (val('pSkin') || 0) : 0, coreT = cored ? T - 2 * skin : 0;
     // Plies for one laminate: light face plies outside, heavy bulk fabric inside (whole plies, never less than the thickness needed); cheaper option wins
-    const lam = (tl, faces) => { const b = m.bulk, k = Math.max(1, Math.round(tl / m.t)), A = { n: k, cost: k * m.perM2 };
+    const lam = (tl, faces) => { const b = m.bulk, k = Math.max(1, Math.round(tl / m.t)), A = { n: k, f: k, nb: 0, bmm: 0, cost: k * m.perM2 };
       if (!b || tl <= faces * m.t) return A;
-      const bt = tl - faces * m.t, nb = Math.max(1, Math.round(bt / b.t)), B = { n: faces + nb, cost: faces * m.perM2 + Math.max(bt, nb * b.t) * b.perM2mm };
+      const bt = tl - faces * m.t, nb = Math.max(1, Math.round(bt / b.t)), B = { n: faces + nb, f: faces, nb, bmm: Math.max(bt, nb * b.t), cost: faces * m.perM2 + Math.max(bt, nb * b.t) * b.perM2mm };
       return B.cost < A.cost ? B : A; };
     const lm1 = cored ? lam(skin, 1) : lam(T, 2), k = cored ? 2 : 1;
     const a = L * W / 1e6, n = k * lm1.n;
-    mat = a * (k * lm1.cost + f.perM2 + (cored ? C.core.perM2mm * Math.max(coreT, 0) : 0));
+    // Volume prices: light plies and heavy bulk plies are different fabrics, each counted on its own order area.
+    const aF = a * k * lm1.f * q, aB = a * k * lm1.nb * q, b = m.bulk;
+    const lamCost = k * (lm1.f * plyM2(val('pMat'), aF) + (lm1.bmm ? lm1.bmm * (b.perM2mm - (b.fabPerMm || 0) * (1 - vm(b.vol, aB))) : 0));
+    fabA = aF + aB; fabSave = a * (k * lm1.cost - lamCost);
+    mat = a * (lamCost + f.perM2 + (cored ? C.core.perM2mm * Math.max(coreT, 0) : 0));
     const cutM = fileGeo && fileGeo.L === L && fileGeo.W === W ? Math.max(fileGeo.cutM, 2 * (L + W) / 1000) : 2 * (L + W) / 1000;
     kg = a * (cored ? 2 * skin * m.density + Math.max(coreT, 0) * C.core.density / 1000 + C.core.bondKgM2 : T * m.density);
     cut = holes > 0 || cutM > 2.1 * (L + W) / 1000;   // the weight is for the full rectangle
@@ -331,7 +340,8 @@ function calc(){
     spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins (about ${Math.round(skin * m.gsmPerMm)} gsm each)${coreT > 0 ? ` on ${+coreT.toFixed(1)} mm foam core` : ''}` : `solid (about ${Math.round(T * m.gsmPerMm)} gsm)`}, ${f.label}, ${holes} holes, ${cutM.toFixed(1)} m of cutting`);
   } else if (kind === 'rotor') {
     const D = val('rD'), B = val('rB'), m = P.plies[val('rMat')], geo = val('rGeo'), R = P.rotor, bm = R.bladeMult[B];
-    mat = (R.matBase + D * D * R.matPerIn2) * bm * m.perM2 / P.plies.carbon.perM2;
+    const eq = (R.matBase + D * D * R.matPerIn2) * bm / P.plies.carbon.perM2;   // rotor material as m² of carbon ply
+    mat = eq * plyM2(val('rMat'), eq * q); fabA = eq * q; fabSave = eq * m.perM2 - mat;
     hr = (R.hrBase + D * R.hrPerIn) * bm + R.balanceHours;
     kg = R.kgPerIn2 * D * D * bm;
     mat += cons(0, hr);
@@ -351,7 +361,7 @@ function calc(){
     // Wall thickness in mm -> whole plies of the chosen fabric, rounded up
     const wall = val('mWall') || 1, n = Math.max(1, Math.ceil(wall / m.t - 1e-9));
     const a = (L * W + 2 * H * (L + W)) / 1e6;
-    mat = a * n * m.perM2;
+    mat = a * n * plyM2(val('mMat'), a * n * q); fabA = a * n * q; fabSave = a * n * m.perM2 - mat;
     // Thick wet layups cure in stages (about 1,200 gsm of fabric per cure); each extra cure adds bagging time. Prepreg cures once.
     const cures = val('mMat') === 'prepreg' ? 1 : Math.max(1, Math.ceil(n * m.gsm / M.wetGsmPerCure - 1e-9));
     hr = M.hrPerPart + M.trimHours + a * (M.hrPerM2 + n * M.hrPerM2Ply) * c.labor + (cures - 1) * (M.hrPerCure + a * M.hrPerM2 * c.labor);
@@ -388,6 +398,7 @@ function calc(){
   // Part weight: one short line on the page and in the email. Under 0.1 kg in grams.
   const wt = kg > 0 && isFinite(kg) ? `About ${kg < 0.1 ? `${Math.max(1, Math.round(kg * 1000))} g` : `${kg < 1 ? kg.toFixed(2) : kg < 10 ? kg.toFixed(1) : Math.round(kg)} kg`} each${cut ? ' before cutouts' : ''}.` : '';
   if (wt) spec.push(`Weight: ${wt.toLowerCase().slice(0, -1)}`);
+  if (fabSave > 0.005) spec.push(`Fabric at volume prices: about ${Math.round(fabA)} m² for the order`);
   if (review.length) return { q, manual: true, review, spec, warn: [], lines: [], kg, hr };
   // Never charge more than the next quantity break would (labor discount steps at 10/50/250).
   const nb = P.qtyBreaks.find(b => b.min > q), capped = nb && price(hr * qtyMult(nb.min), mat) * nb.min < price(hr * lm, mat) * q;
