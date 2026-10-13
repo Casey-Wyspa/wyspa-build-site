@@ -438,7 +438,8 @@ const readFiles = new Map(), inch = mm => +(mm / 25.4).toFixed(2);
 const est = new Map();
 // All attached files with an estimate: one engineer review for the whole order (B67), so the extra review lines are taken off.
 const combo = () => { const fl = cadNames().filter(n => est.has(n)); if (!last.only || fl.length < 2 || !fl.includes(pricedFile)) return null;
-  return { t: fl.reduce((s, n) => s + est.get(n).sub, 0) - (fl.length - 1) * Math.round(price(P.reviewHours, 0)), txt: fl.map(n => `${n} × ${est.get(n).q}`).join(', ') }; };
+  return { t: fl.reduce((s, n) => s + est.get(n).sub, 0) - (fl.length - 1) * Math.round(price(P.reviewHours, 0)), txt: fl.map(n => `${n} × ${est.get(n).q}`).join(', '),
+    lead: [0, 1].map(i => Math.max(...fl.map(n => est.get(n).lead[i]))) }; };   // B100: the order is ready when its slowest part is
 const comboLine = C => `All your files: about ${usd(C.t)} (${C.txt}).`;
 // B99: each tab remembers the last file priced on it, and each file keeps what was read from it (mesh surface, cut length,
 // solid, unit guess, file message). Clicking a tab brings that file back with its own fields and quantity, not the last file's.
@@ -537,10 +538,10 @@ function addWorkDays(n){
   while (n > 0) { d.setDate(d.getDate() + 1); if (d.getDay() % 6) n--; }
   return d;
 }
-const readyDates = () => [addWorkDays(last.lead[0]), addWorkDays(last.lead[1])];
+const readyDates = (L = last.lead) => [addWorkDays(L[0]), addWorkDays(L[1])];
 const shortDate = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 // "Nov 3–17", or "Nov 24–Dec 8" when the range crosses a month.
-const readyRange = () => { const [a, b] = readyDates(); return `${shortDate(a)}–${a.getMonth() === b.getMonth() ? b.getDate() : shortDate(b)}`; };
+const readyRange = L => { const [a, b] = readyDates(L); return `${shortDate(a)}–${a.getMonth() === b.getMonth() ? b.getDate() : shortDate(b)}`; };
 // 'sooner', 'tight' or '' comparing the Need-by date with the ready range (only when there is an instant price).
 function needFit(){
   const v = $('#sf').elements.need.value;
@@ -572,7 +573,7 @@ function draw(){
     const sz = SIZES.includes(el.name), v = sz ? size(el).v : parseFloat(el.value), req = sz && el.name !== 'mH';
     return el.value.trim() === '' ? req : !(v >= 0) || (req && v <= 0);
   }) || (!last.manual && !isFinite(last.total)));
-  if (pricedFile && kind === pricedKind && !badSize && !needSize) { if (last.manual) est.delete(pricedFile); else est.set(pricedFile, { sub: last.sub, q: last.q, spec: last.spec[0] }); }
+  if (pricedFile && kind === pricedKind && !badSize && !needSize) { if (last.manual) est.delete(pricedFile); else est.set(pricedFile, { sub: last.sub, q: last.q, spec: last.spec[0], lead: last.lead }); }
   if (badSize) {
     $('#estlb').textContent = 'Estimate'; $('#tot').style.fontSize = '';
     $('#tot').textContent = '$–'; $('#per').textContent = `Fill in the ${badQty ? 'quantity' : 'size'} to see a price.`;
@@ -593,18 +594,21 @@ function draw(){
     $('#lines').innerHTML = ''; $('#warn').innerHTML = '';
     return;
   }
-  $('#tot').textContent = usd(last.total);
-  // B96: the part price first, then the line about all files. B89: with 2+ estimates, one line with their sum.
-  const C = combo();
-  $('#per').textContent = `${usd(last.total / last.q)} each, all in · Ready about ${readyRange()} if you approve today${last.only ? `. ${C ? comboLine(C) : 'We\'ll send one price for all your files. The review and minimum apply once.'}` : ''}`;
+  // B100: with 2+ priced files the big number is the order total, ready when its slowest part is; this file's price is the small line.
+  const C = combo(), each = `${usd(last.total / last.q)} each`;
+  if (C) $('#estlb').textContent = 'Estimate for all your files';
+  $('#tot').textContent = usd(C ? C.t : last.total);
+  $('#per').textContent = C ? `${C.txt} · All ready about ${readyRange(C.lead)} if you approve today. ${last.only}: ${usd(last.total)}, ${each}.`
+    : `${each}, all in · Ready about ${readyRange()} if you approve today${last.only ? '. We\'ll send one price for all your files. The review and minimum apply once.' : ''}`;
   $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${last.only ? `Total for ${last.only}` : 'Total'}</td><td class="n">${usd(last.total)}</td></tr>`;
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
   const noFile = kind === 'panel' && !$('#sf').elements.files.files.length, holes = parseFloat(qf.elements.pHoles.value) > 0;
   const plain = noFile ? [`This price is for a plain rectangle${holes ? ' with holes' : ''}. Send a drawing to price cutouts and shaped edges.`] : [];
   // Honest pointer (market check 2026-10-13): plain solid sheet and stock prop sizes cost less from a catalog. Page only, not the email.
-  // B93: only for a typed plain rectangle (no file, no holes); a cut part is custom.
-  const fit2 = noFile && !holes && val('pCore') !== 'core' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
+  // B93: only for a typed plain rectangle (no file, no holes); a cut part is custom. B103: carbon and glass (G-10) plate are
+  // stock catalog items; carbon + glass sheet isn't, so no line for it.
+  const fit2 = noFile && !holes && val('pCore') !== 'core' && val('pMat') !== 'hybrid' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
     : kind === 'rotor' && val('rGeo') === 'new' ? ["A stock-size prop usually costs less from a catalog. We're best for custom rotors."] : [];
   $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...(last.only && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
