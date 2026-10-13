@@ -88,7 +88,7 @@ html,body{margin:0;background:#eef2f3}
  .wb .hero,.wb .two,.wb .sh,.wb .qt{grid-template-columns:minmax(0,1fr)}
  .wb .est{position:static}
  .wb .bar.on{display:flex;justify-content:space-between;align-items:center;gap:12px;position:fixed;left:0;right:0;bottom:0;z-index:5;padding:12px 16px;background:var(--ink);color:var(--paper);text-decoration:none;font:800 22px/1 var(--d);font-stretch:125%}
- .wb .bar .lb{color:var(--rule)}
+ .wb .bar .lb{color:var(--rule);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 }
 @media (max-width:520px){
  .wb form fieldset,.wb .steps{grid-template-columns:minmax(0,1fr)}
@@ -355,7 +355,7 @@ function calc(){
   if (capped) warn.push(`Same total as ${nb.min} parts.`);
   // Several CAD files attached, but the price is for one (B25).
   const cad = [...$('#sf').elements.files.files].map(f => f.name).filter(n => /\.(dxf|stp|step|igs|iges|stl|3dm)$/i.test(n));
-  if (cad.length > 1 && cad.includes(pricedFile)) warn.push(`This price is for ${pricedFile} only. An engineer will price your other files by email.`);
+  const only = cad.length > 1 && cad.includes(pricedFile) ? pricedFile : '';
   const unitP = capped ? price(hr * qtyMult(nb.min), mat) * nb.min / q : price(hr * lm, mat), lines = [
     // B29: show the volume discount on screen, not just in the emailed spec.
     [`Parts: ${q} × ${usd2(unitP)}${(capped ? qtyMult(nb.min) : lm) < 1 ? ` (${Math.round((1 - (capped ? qtyMult(nb.min) : lm)) * 100)}% off labor only)` : ''}`, unitP * q],
@@ -375,7 +375,7 @@ function calc(){
   // Same discount as the Parts line, including the "same total as 50 parts" cap (B41).
   const em = capped ? qtyMult(nb.min) : lm;
   if (em < 1) spec.push(`Volume discount on labor: ${Math.round((1 - em) * 100)}%`);
-  return { q, total, unitP, lines, warn, spec, lead, belowMin, fit };
+  return { q, total, unitP, lines, warn, spec, lead, belowMin, fit, only };
 }
 
 let fileGeo = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '', inchEl = null;
@@ -386,8 +386,10 @@ function applyFile(g, file, sketch) {
   dt.items.add(file); fi.files = dt.files;
   // Unreadable CAD and untouched sizes: don't show the default part's price as if it were theirs.
   // Sketches (images, PDFs) are just attached; typed sizes keep their price, untouched defaults ask for a size.
-  const typed = [...fs(kind).querySelectorAll('input:not([name=qty])')].some(el => el.value !== el.defaultValue);
+  const typed = [...fs(kind).querySelectorAll('input:not([name=qty])')].some(el => el.value !== el.defaultValue && el.value !== '');
   needSize = !g && !typed; fileSolid = false;
+  // B49: a sketch with untouched sizes: blank the sizes so the defaults don't look like theirs.
+  if (sketch && !typed) SIZES.forEach(n => { const el = fs(kind).querySelector(`[name="${n}"]`); if (el) el.value = ''; });
   if (sketch) $('#cadmsg').textContent = typed ? 'File attached. We\'ll use it with the sizes you typed.' : 'File attached. Type the size to see a price.';
   if (!g) return render();
   pricedFile = file.name;
@@ -486,25 +488,27 @@ function draw(){
     $('#warn').innerHTML = kind === 'assembly' ? '' : `Why: ${last.review.join(' · ')}`;
     return;
   }
-  $('#estlb').textContent = 'Estimate'; $('#tot').style.fontSize = '';
+  // B48: several CAD files, one priced. Say so in the label, not just a note.
+  $('#estlb').textContent = last.only && !needSize ? `Estimate for ${last.only} only` : 'Estimate'; $('#tot').style.fontSize = '';
   if (needSize) {
     $('#tot').textContent = '$–'; $('#per').textContent = 'Fill in the size to see a price.';
     $('#lines').innerHTML = ''; $('#warn').innerHTML = '';
     return;
   }
   $('#tot').textContent = usd(last.total);
-  $('#per').textContent = `${usd(last.total / last.q)} each · Ready about ${readyRange()} if you approve today`;
-  $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Total</td><td class="n">${usd(last.total)}</td></tr>`;
+  $('#per').textContent = `${last.only ? 'We\'ll price your other files by email. ' : ''}${usd(last.total / last.q)} each · Ready about ${readyRange()} if you approve today`;
+  $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${last.only ? `${last.only} only` : 'Total'}</td><td class="n">${usd(last.total)}</td></tr>`;
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
-  const plain = kind === 'panel' && !$('#sf').elements.files.files.length ? ['This price is for a plain rectangle with holes. Send a drawing to price cutouts and shaped edges.'] : [];
+  const plain = kind === 'panel' && !$('#sf').elements.files.files.length ? [`This price is for a plain rectangle${parseFloat(qf.elements.pHoles.value) > 0 ? ' with holes' : ''}. Send a drawing to price cutouts and shaped edges.`] : [];
   $('#warn').innerHTML = [...plain, ...last.warn, ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('');
 }
 
 function setKind(k){
   // Keep a quantity the buyer typed when the tab changes (by click or by an uploaded file).
   const q0 = kind && fs(kind) && fs(kind).querySelector('[name=qty]'), q1 = fs(k).querySelector('[name=qty]');
-  if (q0 && q0 !== q1 && q0.value !== q0.defaultValue) q1.value = q0.value;
+  // B51: a typed quantity stays even if it equals the default (data-t is set when the box is typed in).
+  if (q0 && q0 !== q1 && (q0.dataset.t || q0.value !== q0.defaultValue)) { q1.value = q0.value; q1.dataset.t = q0.dataset.t || ''; }
   kind = k;
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.k === k));
   qf.querySelectorAll('fieldset').forEach(f => f.hidden = f.dataset.k !== k);
@@ -513,7 +517,7 @@ function setKind(k){
   render();
 }
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setKind(b.dataset.k));
-qf.addEventListener('input', () => { needSize = false; render(); });
+qf.addEventListener('input', e => { if (e.target.name === 'qty') e.target.dataset.t = 1; needSize = false; render(); });
 // No past dates in Need by (B33).
 { const t = new Date(); $('#sf').elements.need.min = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; }
 $('#sf').elements.need.addEventListener('change', needNote);
@@ -528,14 +532,14 @@ function summary(){
   const s = $('#sf').elements;
   return [
     `Wyspa Build ${last.manual ? 'review' : 'quote'} request ${qid}`, '',
-    ...last.spec, `Quantity: ${last.q}`,
+    ...last.spec.map(l => l.replace(/NaN/g, '?')), `Quantity: ${last.q}`,   // blank sizes (B49 sketch) read "?", not NaN
     // Converted sizes, e.g. "Thickness 3.2 mm (typed 1/8 in)".
     ...(kind === 'assembly' ? [] : SIZES.map(n => fs(kind).querySelector(`[name="${n}"]`)).filter(Boolean).map(el => [el, size(el)]).filter(([, r]) => r.typed)
       .map(([el, r]) => `${el.parentNode.firstChild.textContent.replace(/\s*\(.*$/, '')} ${r.v} ${el.name === 'rD' ? 'in' : 'mm'} (typed ${r.typed})`)),
     ...(inchEl && !inchEl.closest('fieldset').hidden && inchEl.value === inchEl.dataset.f ? [`Size from ${pricedFile}: the file has no units, so we assumed inches.`] : []), '',
     ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [`Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
       ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
-      `Estimate: ${usd(last.total)} (not binding)`,
+      `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not binding)${last.only ? '. We\'ll email you a price for your other files.' : ''}`,
       `Lead time: ${last.lead[0]}–${last.lead[1]} working days after approval (about ${readyRange()} if approved today)`]),
     ...(last.warn.length ? ['', 'Notes:', ...last.warn.map(w => '- ' + w)] : []), '',
     `Name: ${s.name.value}`, `Company: ${s.org.value}`, `Email: ${s.email.value}`, `Need by: ${s.need.value || 'flexible'}${({ sooner: ' (before our lead time, check with shop)', tight: ' (tight, check with shop)' })[needFit()] || ''}`,
