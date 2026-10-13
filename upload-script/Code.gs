@@ -8,6 +8,7 @@ const FOLDER_ID = '1qPenfnMvJIZVivt4dVR-LO9EIJpQXXKy';  // Share/AI/6 - Build qu
 const NOTIFY = 'casey@wyspa.tech';
 const MAX_BYTES = 25 * 1024 * 1024;
 const MAX_FILES = 10;
+// Keep in step with SEND_OK in index.html: the page refuses any other type so nothing is dropped silently.
 const OK_EXT = /\.(step|stp|iges|igs|stl|obj|3dm|dxf|dwg|pdf|sldprt|sldasm|x_t|x_b|f3d|png|jpe?g|zip)$/i;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

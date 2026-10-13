@@ -10,6 +10,7 @@
 
   async function handle(file) {
     const ext = file.name.split('.').pop().toLowerCase();
+    if (!window.WB.canSend(file.name)) { inp.value = ''; return say(window.WB.noSend(file.name)); }   // B88
     say(`Reading ${file.name}…`);
     try {
       let geo;
@@ -21,7 +22,7 @@
         if (ext !== 'iges' && ext !== 'igs' && /CONVERSION_BASED_UNIT\s*\(\s*'INCH'/i.test(await file.text())) Object.assign(geo, { units: 'file says inches', inch: true });
       }
       else if (ext === '3dm') geo = await parse3dm(file);
-      else if (file.type.startsWith('image/') || ['pdf', 'heic', 'heif', 'jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
+      else if (file.type.startsWith('image/') || ['pdf', 'jpg', 'jpeg', 'png'].includes(ext)) {
         // applyFile shows the message (it knows whether sizes were typed).
         return window.WB.applyFile(null, file, true);
       } else {

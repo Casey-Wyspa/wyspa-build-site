@@ -148,7 +148,7 @@ html,body{margin:0;background:#eef2f3}
 <section id="quote">
  <div class="sh"><div class="lb">Price</div><div><h2>Get a price</h2></div></div>
 
- <div class="drop" id="drop"><input type="file" id="cad" accept=".dxf,.step,.stp,.iges,.igs,.stl,.3dm,.sldprt,.pdf,image/*" hidden><label for="cad" class="btn pr">Upload a file</label><span>Drop a DXF, STEP, STL or Rhino file for an instant price, or fill in the fields.</span></div>
+ <div class="drop" id="drop"><input type="file" id="cad" accept=".dxf,.step,.stp,.iges,.igs,.stl,.3dm,.sldprt,.pdf,.png,.jpg,.jpeg" hidden><label for="cad" class="btn pr">Upload a file</label><span>Drop a DXF, STEP, STL or Rhino file for an instant price, or fill in the fields.</span></div>
  <p class="note" id="cadmsg"></p>
  <div class="tabs" role="tablist">
   <button type="button" role="tab" aria-selected="true" data-k="panel">Flat panel</button>
@@ -219,7 +219,7 @@ html,body{margin:0;background:#eef2f3}
     <label>Email<input name="email" type="email" autocomplete="email" required></label>
     <label>Need by<input name="need" type="date"></label>
     <label class="full">Notes<textarea name="notes" rows="3" placeholder="What it's for, loads, weight or finish targets"></textarea></label>
-    <label class="full" id="up">Files: CAD, drawing or photo (up to 10, 25 MB)<input type="file" name="files" multiple accept=".step,.stp,.iges,.igs,.stl,.obj,.3dm,.dxf,.dwg,.pdf,.sldprt,.sldasm,.x_t,.x_b,.f3d,image/*,.heic,.zip"></label>
+    <label class="full" id="up">Files: CAD, drawing or photo (up to 10, 25 MB)<input type="file" name="files" multiple accept=".step,.stp,.iges,.igs,.stl,.obj,.3dm,.dxf,.dwg,.pdf,.sldprt,.sldasm,.x_t,.x_b,.f3d,.png,.jpg,.jpeg,.zip"></label>
     <label style="position:absolute;left:-9999px" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
    </fieldset>
   </form>
@@ -456,7 +456,20 @@ function applyFile(g, file, sketch) {
     ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part, like a blade, foil, mast or tube. These need a two-piece mold, so an engineer prices them. Send it and we'll reply with a price.`
     : `From ${file.name}: ${what} (${g.units}).${noT ? ` Your file has no thickness, so ${tMsg}.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
 }
-window.WB = { applyFile };
+// B88: the upload server (upload-script/Code.gs OK_EXT) only saves these types; keep the two lists the same.
+// Anything else (HEIC, WebP, GIF, Word...) used to be dropped without a word, so refuse it here instead.
+const SEND_OK = /\.(step|stp|iges|igs|stl|obj|3dm|dxf|dwg|pdf|sldprt|sldasm|x_t|x_b|f3d|png|jpe?g|zip)$/i;
+const canSend = name => SEND_OK.test(name);
+const noSend = name => `We can't take .${name.split('.').pop().toLowerCase()} files. Please use JPG, PNG, PDF or a CAD file.`;
+$('#sf').elements.files.addEventListener('change', e => {
+  const fi = e.target, bad = [...fi.files].filter(f => !canSend(f.name));
+  if (!bad.length) return;
+  const dt = new DataTransfer();
+  [...fi.files].filter(f => canSend(f.name)).forEach(f => dt.items.add(f));
+  fi.files = dt.files;
+  $('#msg').textContent = noSend(bad[0].name);
+});
+window.WB = { applyFile, canSend, noSend };
 
 let last;
 // Ready dates: today plus the lead time in working days (Sat/Sun skipped, no holidays).
@@ -587,6 +600,8 @@ $('#go').onclick = async () => {
   if (kind === 'assembly' && !fs('assembly').querySelector('[name=aDesc]').value.trim()) { $('#msg').textContent = 'Tell us what it is first.'; fs('assembly').querySelector('[name=aDesc]').focus(); return; }
   if (!UPLOAD_URL) return mailto();
   const files = [...sf.elements.files.files];
+  const bad = files.find(f => !canSend(f.name));
+  if (bad) return void ($('#msg').textContent = noSend(bad.name));
   if (files.length > 10) return void ($('#msg').textContent = 'Up to 10 files, please. Zip them if you have more.');
   if (files.reduce((t, f) => t + f.size, 0) > 25e6) return void ($('#msg').textContent = 'Files are over 25 MB. Zip them, or send without them and we will send you an upload link.');
   go.disabled = true; $('#msg').textContent = files.length ? `Uploading ${files.length} file${files.length > 1 ? 's' : ''}…` : 'Sending…';
