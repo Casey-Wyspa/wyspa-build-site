@@ -15,7 +15,11 @@
       let geo;
       if (ext === 'dxf') geo = fromDxf(await file.text());
       else if (ext === 'stl') geo = fromMesh(parseStl(await file.arrayBuffer()));
-      else if (['step', 'stp', 'iges', 'igs'].includes(ext)) geo = fromMesh(await parseCad(file, ext), 'mm from file');
+      else if (['step', 'stp', 'iges', 'igs'].includes(ext)) {
+        geo = fromMesh(await parseCad(file, ext), 'mm from file');
+        // B66: the sizes come back in mm either way; an inch STEP says so, like an inch DXF (B57).
+        if (ext !== 'iges' && ext !== 'igs' && /CONVERSION_BASED_UNIT\s*\(\s*'INCH'/i.test(await file.text())) Object.assign(geo, { units: 'file says inches', inch: true });
+      }
       else if (ext === '3dm') geo = await parse3dm(file);
       else if (file.type.startsWith('image/') || ['pdf', 'heic', 'heif', 'jpg', 'jpeg', 'png', 'webp'].includes(ext)) {
         // applyFile shows the message (it knows whether sizes were typed).

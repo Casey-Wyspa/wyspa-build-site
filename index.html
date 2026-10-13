@@ -72,6 +72,7 @@ html,body{margin:0;background:#eef2f3}
 .wb .est tr.t td{font-weight:600;border-bottom:0;border-top:1.5px solid var(--ink)}
 .wb .warn{margin-top:12px;padding:10px 12px;border-left:3px solid var(--signal);font-size:14px;color:var(--ink);background:#fff}
 .wb .warn:empty{display:none}
+.wb .warn div+div{margin-top:8px}
 .wb .note{font-size:13px;color:var(--muted);margin-top:12px}
 .wb .cv{font:400 13px var(--b);color:var(--sea);text-transform:none;letter-spacing:0}
 .wb .cv:empty{display:none}
@@ -164,7 +165,7 @@ html,body{margin:0;background:#eef2f3}
     <label>Thickness (mm or in)<input type="text" name="pT" value="2"></label>
     <label>Material<select name="pMat"></select></label>
     <label>Foam core<select name="pCore"><option value="solid">No, solid</option><option value="core">Yes, foam in the middle</option></select></label>
-    <label id="pSkinL" hidden>Outer layers, each side (mm)<input type="number" name="pSkin" value="1" min="0.1" max="10" step="0.1"></label>
+    <label id="pSkinL" hidden>Outer layers, each side (mm or in)<input type="text" name="pSkin" value="1"></label>
     <label>Finish<select name="pFin"></select></label>
     <label>Holes per panel<input type="number" name="pHoles" value="0" min="0" step="1"></label>
     <label>Quantity<input type="number" name="qty" value="10" min="1" step="1"></label>
@@ -258,7 +259,7 @@ $('#qid').textContent = qid;
 const fs = k => qf.querySelector(`fieldset[data-k="${k}"]`);
 // Sizes can be typed in mm or inches (B34): "3", "3 mm", "0.125 in", '1/8"', "1 1/2 in", "1-1/2". A fraction with no unit is inches.
 // Returns the value in the field's unit (inches for rD, mm for the rest), NaN if unreadable, and a note when the unit was converted.
-const SIZES = ['pL', 'pW', 'pT', 'rD', 'mL', 'mW', 'mH', 'mWall'];
+const SIZES = ['pL', 'pW', 'pT', 'pSkin', 'rD', 'mL', 'mW', 'mH', 'mWall'];
 function size(el){
   const fu = el.name === 'rD' ? 'in' : 'mm', s = el.value.trim().toLowerCase().replace(/[”″]|''/g, '"');
   const m = s.match(/^(?:(\d+(?:\.\d*)?|\.\d+)|(?:(\d+)(?:\s+|\s*-\s*))?(\d+)\s*\/\s*(\d+))\s*(mm|cm|in|inch|inches|")?$/);
@@ -310,7 +311,8 @@ function calc(){
     if (cored && coreT <= 0) review.push(`Too thin for a foam core. ${typedIn('pT') ? `Is it in inches?${typedIn('pT')}` : 'Check thickness and outer layers.'}`);
     else if (cored && coreT < C.core.minT) review.push(`Foam core under ${C.core.minT} mm. Check thickness and outer layers.`);
     if (!cored && T > X.panelMaxSolidT) review.push(`Solid laminate thicker than ${X.panelMaxSolidT} mm. Foam in the middle? Set Foam core to Yes.`);
-    if (cored && skin < X.minSkin) review.push(`Outer layers under ${X.minSkin} mm`);
+    // B69: skins take mm or inches like the other sizes; a bare tiny number asks about inches, like Thickness.
+    if (cored && skin < X.minSkin) review.push(`Outer layers under ${X.minSkin} mm${typedIn('pSkin') ? `. Is it in inches?${typedIn('pSkin')}` : ''}`);
     if (cored && coreT > X.maxCoreToSkin * skin) review.push('Thin outer layers on a thick core');
     spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins (about ${Math.round(skin * m.gsmPerMm)} gsm each)${coreT > 0 ? ` on ${+coreT.toFixed(1)} mm foam core` : ''}` : `solid (about ${Math.round(T * m.gsmPerMm)} gsm)`}, ${f.label}, ${holes} holes, ${cutM.toFixed(1)} m of cutting`);
   } else if (kind === 'rotor') {
@@ -399,7 +401,7 @@ function applyFile(g, file, sketch) {
   const typed = [...fs(kind).querySelectorAll('input:not([name=qty])')].some(el => el.value !== el.defaultValue && el.value !== '');
   needSize = !g && !typed; fileSolid = false;
   // B49: a sketch with untouched sizes: blank the sizes so the defaults don't look like theirs.
-  if (sketch && !typed) SIZES.forEach(n => { const el = fs(kind).querySelector(`[name="${n}"]`); if (el) el.value = ''; });
+  if (sketch && !typed) SIZES.filter(n => n !== 'pSkin').forEach(n => { const el = fs(kind).querySelector(`[name="${n}"]`); if (el) el.value = ''; });
   if (sketch) $('#cadmsg').textContent = typed ? 'File attached. We\'ll use it with the sizes you typed.' : 'File attached. Type the size to see a price.';
   // B56: what was read from each file, for the email lines about files we don't price ('' = nothing read).
   readFiles.set(file.name, !g ? '' : (g.inch ? `${inch(g.L)} × ${inch(g.W)}${g.H ? ` × ${inch(g.H)}` : ''} in` : `${Math.round(g.L)} × ${Math.round(g.W)}${g.H ? ` × ${Math.round(g.H)}` : ''} mm`)
@@ -435,7 +437,8 @@ function applyFile(g, file, sketch) {
     // Flanges and inserts can't be read from a mesh, so the buyer picks those. Was depth < 15% of the longest side.
     const span = Math.min(g.L, g.W);
     put('mCx', g.complex || fileSolid ? 'complex' : span > 0 && g.H / span < 0.5 ? 'simple' : 'medium');
-    what = `${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm${g.wall ? `, about ${wall} mm wall` : ''}`;
+    // B66: an inch STEP is shown in inches first, like an inch DXF (B57).
+    what = `${g.inch ? `${inch(g.L)} × ${inch(g.W)} × ${inch(g.H)} in (${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm)` : `${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm`}${g.wall ? `, about ${wall} mm wall` : ''}`;
   }
   // B44/B55: carry a guessed unit (mm or inches) into the email while the size from the file is unchanged.
   unitEl = /^(assumed|read as)/.test(g.units) && (kind === 'panel' || kind === 'molded') ? qf.querySelector(`[name="${kind === 'panel' ? 'pL' : 'mL'}"]`) : null;
@@ -491,6 +494,7 @@ function draw(){
   // Show "1/8 in = 3.2 mm" under a field only when its unit was converted.
   SIZES.forEach(n => { const el = qf.querySelector(`[name="${n}"]`); el.nextElementSibling.textContent = size(el).note || ''; });
   badSize = badQty || kind !== 'assembly' && ([...fs(kind).querySelectorAll('input:not([name=qty]):not([name=pHoles])')].some(el => {
+    if (el.closest('[hidden]')) return false;   // pSkin while the panel is solid
     const sz = SIZES.includes(el.name), v = sz ? size(el).v : parseFloat(el.value), req = sz && el.name !== 'mH';
     return el.value.trim() === '' ? req : !(v >= 0) || (req && v <= 0);
   }) || (!last.manual && !isFinite(last.total)));
@@ -520,7 +524,7 @@ function draw(){
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
   const plain = kind === 'panel' && !$('#sf').elements.files.files.length ? [`This price is for a plain rectangle${parseFloat(qf.elements.pHoles.value) > 0 ? ' with holes' : ''}. Send a drawing to price cutouts and shaped edges.`] : [];
-  $('#warn').innerHTML = [...plain, ...last.warn, ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('');
+  $('#warn').innerHTML = [...plain, ...last.warn, ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 function setKind(k){
@@ -553,7 +557,7 @@ function summary(){
     `Wyspa Build ${last.manual ? 'review' : 'quote'} request ${qid}`, '',
     ...last.spec.map(l => l.replace(/NaN/g, '?')), `Quantity: ${last.q}`,   // blank sizes (B49 sketch) read "?", not NaN
     // Converted sizes, e.g. "Thickness 3.2 mm (typed 1/8 in)".
-    ...(kind === 'assembly' ? [] : SIZES.map(n => fs(kind).querySelector(`[name="${n}"]`)).filter(Boolean).map(el => [el, size(el)]).filter(([, r]) => r.typed)
+    ...(kind === 'assembly' ? [] : SIZES.map(n => fs(kind).querySelector(`[name="${n}"]`)).filter(el => el && !el.closest('[hidden]')).map(el => [el, size(el)]).filter(([, r]) => r.typed)
       .map(([el, r]) => `${el.parentNode.firstChild.textContent.replace(/\s*\(.*$/, '')} ${r.v} ${el.name === 'rD' ? 'in' : 'mm'} (typed ${r.typed})`)),
     ...(unitEl && !unitEl.closest('fieldset').hidden && unitEl.value === unitEl.dataset.f ? [`Size: ${pricedFile} has no units, so we assumed ${unitAs}.`] : []),
     ...(kind === 'panel' && pricedFile && qf.elements.pT.dataset.d === qf.elements.pT.value ? [`Thickness: not in ${pricedFile}, so we used ${size(qf.elements.pT).v} mm.`] : []), '',
