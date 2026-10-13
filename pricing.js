@@ -90,6 +90,7 @@ window.WYSPA_PRICING = {
     maxPlies: 20,
     moldedHrPerKg: [3, 12],   // molded labor hours per kg of part outside this goes to engineer review. Big-part aerospace plan: 4.1-6.2 h/kg (wing 6.4-9.6)
     moldedHrPerKgMinKg: 2,    // only parts of at least this weight: below it the fixed prep/trim hours dominate (a real 0.5 kg skin took 13.5 h/kg)
+    moldedSmallKg: 0.2, moldedSmallGsm: 2400,   // molded part under 0.2 kg with more than 2,400 gsm of fabric (over 2 wet cures): a shop would press-mold or machine it (2026-10-13)
     panelMaxSolidT: 10,       // mm, solid laminate (cure heat, voids, press size)
     minSkin: 0.4,             // mm, cored panel skin (2 plies)
     maxCoreToSkin: 50,        // core thickness / skin thickness (dents, inserts, edge crush)

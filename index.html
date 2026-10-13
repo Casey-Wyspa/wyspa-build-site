@@ -370,7 +370,9 @@ function calc(){
       if (n > X.maxPlies) review.push(`Wall thicker than ${+(X.maxPlies * m.t).toFixed(1)} mm`);
       // Weight check (internal): labor hours per kg far from the big-part reference means the layup is unusual for its size.
       const hk = hr / kg, HK = X.moldedHrPerKg;
-      if (HK && kg >= (X.moldedHrPerKgMinKg || 0) && (hk < HK[0] || hk > HK[1])) review.push('Wall very thick or very thin for this size');
+      if (HK && kg >= (X.moldedHrPerKgMinKg || 0) && (hk < HK[0] || hk > HK[1])) review.push(hk < HK[0] ? 'Wall is too thick for this size' : 'Wall is too thin for this size');   // few hours per kg = a heavy, thick wall
+      // Small, thick parts (e.g. a 60 g bracket with a 3.4 mm wall): a shop would press-mold or machine them, not bag them wet in 3 cures.
+      if (X.moldedSmallKg && kg < X.moldedSmallKg && n * m.gsm > X.moldedSmallGsm) review.push('Small, thick molded part');
       review.push(...[small('mL', 'Length', 25), small('mW', 'Width', 25)].filter(Boolean));
       // B37: only blame the file when the wall came from one.
       const wEl = fs('molded').querySelector('[name=mWall]');
@@ -566,7 +568,7 @@ function draw(){
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
   const plain = kind === 'panel' && !$('#sf').elements.files.files.length ? [`This price is for a plain rectangle${parseFloat(qf.elements.pHoles.value) > 0 ? ' with holes' : ''}. Send a drawing to price cutouts and shaped edges.`] : [];
-  $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...last.warn, ...(last.underMin ? [`Every order is at least ${usd(P.minOrder)}, all files together.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+  $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...last.warn, ...(last.underMin ? [`Minimum order is ${usd(P.minOrder)} for all files combined.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 function setKind(k){
