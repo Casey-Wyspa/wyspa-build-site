@@ -3,13 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Composite Parts Quote | Wyspa Build</title>
-<meta name="description" content="Get a price for composite panels, drone rotors and molded parts in seconds. An engineer checks every part; a partner shop builds it.">
-<meta property="og:title" content="Wyspa Build: Composite Parts, Quoted Instantly">
-<meta property="og:description" content="Composite parts, priced in seconds. Checked by an engineer, built by a partner shop.">
-<meta property="og:url" content="https://build.wyspa.tech/">
+<title>Carbon Fiber Parts, Instant Quote | Wyspa Build</title>
+<meta name="description" content="Instant prices for carbon fiber and fiberglass panels, drone rotors and molded parts. Drop a CAD file. No account needed. An engineer checks every part.">
+<link rel="canonical" href="https://build.wyspa.tech/">
+<meta name="theme-color" content="#0d2430">
 <link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Wyspa Build">
+<meta property="og:title" content="Composite parts, priced in seconds">
+<meta property="og:description" content="Panels, drone rotors and molded parts. Type the size or drop a CAD file. No account needed. An engineer checks every part.">
+<meta property="og:url" content="https://build.wyspa.tech/">
 <meta property="og:image" content="https://build.wyspa.tech/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Wyspa Build: composite parts, priced in seconds. build.wyspa.tech">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112,600;125,800&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap">
 <style>
 html,body{margin:0;background:#eef2f3}
@@ -346,7 +355,7 @@ function calc(){
       if (val('mCx') === 'complex') review.push('Closed or split mold, undercuts');
       if (Math.max(L, W) > X.moldedMaxDim) review.push(`Longer than ${X.moldedMaxDim} mm`);
       if (H > X.moldedMaxDepth) review.push(`Deeper than ${X.moldedMaxDepth} mm`);
-      else if (X.moldedMaxDepthRatio && val('mCx') !== 'complex' && H > X.moldedMaxDepthRatio * Math.min(L, W)) review.push('Deeper than it is wide');   // 2026-10-13: deep narrow parts need a split or closed mold
+      else if (X.moldedMaxDepthRatio && val('mCx') !== 'complex' && H > X.moldedMaxDepthRatio * Math.min(L, W)) review.push('The part is deeper than it is wide');   // 2026-10-13: deep narrow parts need a split or closed mold
       if (n > X.maxPlies) review.push(`Wall thicker than ${+(X.maxPlies * m.t).toFixed(1)} mm`);
       review.push(...[small('mL', 'Length', 25), small('mW', 'Width', 25)].filter(Boolean));
       // B37: only blame the file when the wall came from one.
@@ -534,7 +543,7 @@ function draw(){
     return;
   }
   $('#tot').textContent = usd(last.total);
-  $('#per').textContent = `${last.only ? 'We\'ll email one price for all your files, with one review and one minimum. ' : ''}${usd(last.total / last.q)} each, all in · Ready about ${readyRange()} if you approve today`;
+  $('#per').textContent = `${last.only ? 'We\'ll email one price for all your files. One engineer review, one minimum. ' : ''}${usd(last.total / last.q)} each, all in · Ready about ${readyRange()} if you approve today`;
   $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${last.only ? `${last.only} only` : 'Total'}</td><td class="n">${usd(last.total)}</td></tr>`;
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
@@ -578,7 +587,7 @@ function summary(){
     ...(kind === 'panel' && pricedFile && qf.elements.pT.dataset.d === qf.elements.pT.value ? [`Thickness: not in ${pricedFile}, so we used ${size(qf.elements.pT).v} mm.`] : []), '',
     ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [`Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
       ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
-      `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not binding)${last.only ? '. We\'ll email one price for all your files, with one review and one minimum.' : ''}`,
+      `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not binding)${last.only ? '. We\'ll email one price for all your files. One engineer review, one minimum.' : ''}`,
       `Lead time: ${last.lead[0]}–${last.lead[1]} working days after approval (about ${readyRange()} if approved today)`]),
     // B56: one line per other CAD file, with what was read from it.
     ...(() => { const o = cadNames().filter(n => n !== pricedFile);
