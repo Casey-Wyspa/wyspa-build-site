@@ -31,7 +31,8 @@ window.WYSPA_PRICING = {
     glass:   { label: "Fiberglass",     gsm: 300, t: 0.26, gsmPerMm: 1140, perM2: 28, density: 1.74 },     // 7781 E-glass
     hybrid:  { label: "Carbon + glass", gsm: 250, t: 0.24, gsmPerMm: 1040, perM2: 49, density: 1.60 },     // average of one carbon + one 7781 ply
   },
-  consumablesPerM2: 20,       // peel ply, bag, breather, release, per m² of part per cure
+  consumablesPerM2: 20,       // peel ply, bag, breather, release, per m² of part per cure: the floor
+  consumablesPerHour: 15,     // consumables per part labor hour, as a composite shop billed them (2025 invoice, actual); the larger of the two is used
 
   // Flat panels: laid up flat, cured, CNC cut
   panel: {

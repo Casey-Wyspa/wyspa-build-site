@@ -293,6 +293,8 @@ const cadNames = () => [...$('#sf').elements.files.files].map(f => f.name).filte
 
 function calc(){
   const q = Math.max(1, Math.round(val('qty') || 1)), warn = [], spec = [], review = [], lm = qtyMult(q), X = P.review;
+  // Consumables: per part labor hour, never less than the per-m² bag materials (2026-10-13).
+  const cons = (m2, h) => Math.max(m2 * P.consumablesPerM2, h * (P.consumablesPerHour || 0));
   let hr = 0, mat = 0, nre = 0, setup = 0, lead, kg = 0, cut = false;   // kg: finished part weight from the laminate (areal weight x area, plus core)
   if (kind === 'panel') {
     const L = val('pL'), W = val('pW'), T = val('pT'), holes = Math.max(0, Math.round(val('pHoles') || 0)), m = P.plies[val('pMat')], cored = val('pCore') === 'core', f = P.panel.finish[val('pFin')], C = P.panel;
@@ -305,11 +307,12 @@ function calc(){
       return B.cost < A.cost ? B : A; };
     const lm1 = cored ? lam(skin, 1) : lam(T, 2), k = cored ? 2 : 1;
     const a = L * W / 1e6, n = k * lm1.n;
-    mat = a * (k * lm1.cost + P.consumablesPerM2 + f.perM2 + (cored ? C.core.perM2mm * Math.max(coreT, 0) : 0));
+    mat = a * (k * lm1.cost + f.perM2 + (cored ? C.core.perM2mm * Math.max(coreT, 0) : 0));
     const cutM = fileGeo && fileGeo.L === L && fileGeo.W === W ? Math.max(fileGeo.cutM, 2 * (L + W) / 1000) : 2 * (L + W) / 1000;
     kg = a * (cored ? 2 * skin * m.density + Math.max(coreT, 0) * C.core.density / 1000 + C.core.bondKgM2 : T * m.density);
     cut = holes > 0 || cutM > 2.1 * (L + W) / 1000;   // the weight is for the full rectangle
     hr = a * (n * C.hrPerM2Ply + f.hrPerM2 + (cored ? C.core.hrPerM2 : 0)) + C.hrPerPart + cutM * C.hrPerMCut + holes * C.hrPerHole;
+    mat += cons(a, hr);
     setup = price(C.setupHours, 0); lead = P.leadDays.panel;
     const [mx, my] = C.maxSize;
     if (Math.max(L, W) > mx || Math.min(L, W) > my) review.push(`Larger than the ${mx} × ${my} mm standard sheet`);
@@ -331,6 +334,7 @@ function calc(){
     mat = (R.matBase + D * D * R.matPerIn2) * bm * m.perM2 / P.plies.carbon.perM2;
     hr = (R.hrBase + D * R.hrPerIn) * bm + R.balanceHours;
     kg = R.kgPerIn2 * D * D * bm;
+    mat += cons(0, hr);
     if (geo === 'new' || geo === 'design') nre = price((R.mold.hrBase + D * R.mold.hrPerIn) * (B > 2 ? 1.2 : 1), R.mold.matBase + D * R.mold.matPerIn);
     lead = nre ? P.leadDays.rotorNewMold : P.leadDays.rotor;
     if (geo === 'design') review.push('Rotor design by Wyspa');
@@ -347,9 +351,10 @@ function calc(){
     // Wall thickness in mm -> whole plies of the chosen fabric, rounded up
     const wall = val('mWall') || 1, n = Math.max(1, Math.ceil(wall / m.t - 1e-9));
     const a = (L * W + 2 * H * (L + W)) / 1e6;
-    mat = a * (n * m.perM2 + P.consumablesPerM2);
+    mat = a * n * m.perM2;
     hr = M.hrPerPart + M.trimHours + a * (M.hrPerM2 + n * M.hrPerM2Ply) * c.labor;
     kg = a * n * m.t * m.density;
+    mat += cons(a, hr);
     if (val('mTool') === 'new') nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) + (c.tool - 1) * a * M.tool.hrPerM2, a * M.tool.matPerM2 * c.tool);  // B42: minimum hours counted once; shape factor scales only the area hours
     if (nre) setup = price(M.setupHours || 0, 0);   // new-mold orders only: ply templates, trim fixture, first-part check (not discounted)
     lead = nre ? P.leadDays.moldedNewMold : P.leadDays.molded;
