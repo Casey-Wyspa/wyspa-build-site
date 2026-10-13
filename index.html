@@ -109,7 +109,7 @@ html,body{margin:0;background:#eef2f3}
 <header class="hero">
  <div>
   <h1>Composite parts, <em>priced</em> in seconds.</h1>
-  <p class="lead">Panels, drone rotors and molded parts. Get a price now. An engineer checks your part, then a partner shop builds it.</p>
+  <p class="lead">Panels, drone rotors and molded parts.</p>
   <div class="cta"><a class="btn pr" href="#quote">Get a price</a><a class="btn" href="#builders">For shops</a></div>
  </div>
  <figure class="fig">
@@ -139,14 +139,14 @@ html,body{margin:0;background:#eef2f3}
 <section id="how">
  <div class="sh"><div class="lb">How it works</div><div><h2>Three steps</h2></div></div>
  <ol class="steps">
-  <li><h3>Get a price</h3><p>Pick the part, size and amount. The price updates as you type.</p></li>
-  <li><h3>Send your file</h3><p>Add your CAD or a sketch. An engineer checks it will work and sends a firm quote.</p></li>
-  <li><h3>We build it</h3><p>A partner shop makes it. Nothing is charged until you approve the quote.</p></li>
+  <li><h3>Get a price</h3><p>Type the size or drop a file. You see a price in seconds.</p></li>
+  <li><h3>Send it</h3><p>An engineer checks the layers and replies with a firm quote.</p></li>
+  <li><h3>Approve it</h3><p>Say yes to the firm quote. We build your parts and ship them.</p></li>
  </ol>
 </section>
 
 <section id="quote">
- <div class="sh"><div class="lb">Price</div><div><h2>Get a price</h2><p>An estimate now. A firm quote after an engineer checks your part.</p></div></div>
+ <div class="sh"><div class="lb">Price</div><div><h2>Get a price</h2></div></div>
 
  <div class="drop" id="drop"><input type="file" id="cad" accept=".dxf,.step,.stp,.iges,.igs,.stl,.3dm,.sldprt,.pdf,image/*" hidden><label for="cad" class="btn pr">Upload a file</label><span>Drop a DXF, STEP, STL or Rhino file for an instant price, or fill in the fields.</span></div>
  <p class="note" id="cadmsg"></p>
@@ -521,7 +521,7 @@ function draw(){
     return;
   }
   $('#tot').textContent = usd(last.total);
-  $('#per').textContent = `${last.only ? 'We\'ll price your other files by email. ' : ''}${usd(last.total / last.q)} each, all in · Ready about ${readyRange()} if you approve today`;
+  $('#per').textContent = `${last.only ? 'We\'ll email one price for all your files, with one review and one minimum. ' : ''}${usd(last.total / last.q)} each, all in · Ready about ${readyRange()} if you approve today`;
   $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${last.only ? `${last.only} only` : 'Total'}</td><td class="n">${usd(last.total)}</td></tr>`;
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
@@ -565,7 +565,7 @@ function summary(){
     ...(kind === 'panel' && pricedFile && qf.elements.pT.dataset.d === qf.elements.pT.value ? [`Thickness: not in ${pricedFile}, so we used ${size(qf.elements.pT).v} mm.`] : []), '',
     ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [`Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
       ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
-      `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not binding)${last.only ? '. We\'ll email you a price for your other files.' : ''}`,
+      `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not binding)${last.only ? '. We\'ll email one price for all your files, with one review and one minimum.' : ''}`,
       `Lead time: ${last.lead[0]}–${last.lead[1]} working days after approval (about ${readyRange()} if approved today)`]),
     // B56: one line per other CAD file, with what was read from it.
     ...(() => { const o = cadNames().filter(n => n !== pricedFile);
