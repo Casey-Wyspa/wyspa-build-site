@@ -166,7 +166,7 @@ html,body{margin:0;background:#eef2f3}
     <label>Foam core<select name="pCore"><option value="solid">No, solid</option><option value="core">Yes, foam in the middle</option></select></label>
     <label id="pSkinL" hidden>Outer layers, each side (mm)<input type="number" name="pSkin" value="1" min="0.1" max="10" step="0.1"></label>
     <label>Finish<select name="pFin"></select></label>
-    <label>Holes per panel<input type="number" name="pHoles" value="4" min="0" step="1"></label>
+    <label>Holes per panel<input type="number" name="pHoles" value="0" min="0" step="1"></label>
     <label>Quantity<input type="number" name="qty" value="10" min="1" step="1"></label>
    </fieldset>
    <fieldset data-k="rotor" hidden>
@@ -267,7 +267,7 @@ function size(el){
   const u = m[5] ? (m[5] === 'mm' || m[5] === 'cm' ? m[5] : 'in') : m[1] != null ? fu : 'in';
   if (!isFinite(num)) return { v: NaN };
   if (u === fu) return { v: num, bare: !m[5] && m[1] != null };
-  const x = num * { mm: 1, cm: 10, in: 25.4 }[u] / (fu === 'in' ? 25.4 : 1), v = +x.toFixed(x < 1 ? 2 : 1);
+  const x = num * { mm: 1, cm: 10, in: 25.4 }[u] / (fu === 'in' ? 25.4 : 1), v = +(x + 1e-9).toFixed(x < 1 || u === 'in' ? 2 : 1);   // B54: inches to mm keep 2 decimals (1/4 in = 6.35, 1/8 in = 3.18 mm; 1e-9 so 3.175 rounds up)
   const typed = `${m[1] != null ? m[1] : `${m[2] ? m[2] + ' ' : ''}${m[3]}/${m[4]}`} ${u}`;
   return { v, typed, note: `${typed} = ${v} ${fu}` };
 }
@@ -323,7 +323,10 @@ function calc(){
     if (B > X.rotorMaxBlades) review.push(`More than ${X.rotorMaxBlades} blades`);
     spec.push(`Rotor ${D} in diameter, ${B}-blade, ${m.label}, mold: ${fs('rotor').querySelector('[name=rGeo]').selectedOptions[0].text}`);
   } else if (kind === 'molded') {
-    const L = val('mL'), W = val('mW'), H = val('mH') || 0, m = P.plies[val('mMat')], c = P.molded.complexity[val('mCx')], M = P.molded;
+    const L = val('mL'), W = val('mW'), H = val('mH') || 0, cx = qf.elements.mCx;
+    // B52: until the buyer picks a shape, pick Open or Deep from the sizes (same rule as for files).
+    if (!cx.dataset.t && cx.value !== 'complex' && Math.min(L, W) > 0) cx.value = H / Math.min(L, W) < 0.5 ? 'simple' : 'medium';
+    const m = P.plies[val('mMat')], c = P.molded.complexity[cx.value], M = P.molded;
     // Wall thickness in mm -> whole plies of the chosen fabric, rounded up
     const wall = val('mWall') || 1, n = Math.max(1, Math.ceil(wall / m.t - 1e-9));
     const a = (L * W + 2 * H * (L + W)) / 1e6;
@@ -378,7 +381,7 @@ function calc(){
   return { q, total, unitP, lines, warn, spec, lead, belowMin, fit, only };
 }
 
-let fileGeo = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '', inchEl = null;
+let fileGeo = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '', unitEl = null, unitAs = 'mm';
 // Called by autoquote.js after reading a CAD file: attach it to the request and fill in the fields.
 function applyFile(g, file, sketch) {
   const fi = $('#sf').elements.files, dt = new DataTransfer();
@@ -406,7 +409,7 @@ function applyFile(g, file, sketch) {
     setKind('panel');
     put('pL', r(g.L)); put('pW', r(g.W));
     if (g.T > 0.2) put('pT', Math.max(0.3, +g.T.toFixed(1)));
-    put('pHoles', g.holes != null ? g.holes : 0);   // 3D flat plates: holes and cut length come from the side walls (B39); if unreadable, don't price the default 4
+    put('pHoles', g.holes != null ? g.holes : 0);   // 3D flat plates: holes and cut length come from the side walls (B39); if unreadable, 0
     fileGeo = g.cutM ? { L: r(g.L), W: r(g.W), cutM: g.cutM } : null;
     what = `${r(g.L)} × ${r(g.W)} mm${g.T > 0.2 ? ` × ${g.T.toFixed(1)} mm` : ''}${g.holes != null ? `, ${g.holes} holes` : ''}${g.cutM ? `, ${g.cutM.toFixed(1)} m of cutting` : ''}`;
   } else {
@@ -423,14 +426,19 @@ function applyFile(g, file, sketch) {
     put('mCx', g.complex || fileSolid ? 'complex' : span > 0 && g.H / span < 0.5 ? 'simple' : 'medium');
     what = `${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm${g.wall ? `, about ${wall} mm wall` : ''}`;
   }
-  // B44: carry a guessed-inches reading into the email while the size from the file is unchanged.
-  inchEl = /^assumed inches/.test(g.units) && (kind === 'panel' || kind === 'molded') ? qf.querySelector(`[name="${kind === 'panel' ? 'pL' : 'mL'}"]`) : null;
-  render();
-  // B45: a 2D file has no thickness, so say which thickness we used.
+  // B44/B55: carry a guessed unit (mm or inches) into the email while the size from the file is unchanged.
+  unitEl = /^(assumed|read as)/.test(g.units) && (kind === 'panel' || kind === 'molded') ? qf.querySelector(`[name="${kind === 'panel' ? 'pL' : 'mL'}"]`) : null;
+  unitAs = /inches/.test(g.units) ? 'inches' : 'mm';
+  // B45: a 2D file has no thickness, so say which thickness we used (B55: data-d keeps it for the email until the buyer types one).
   const noT = kind === 'panel' && !(g.T > 0.2);
+  const t = qf.elements.pT, tv = size(t).v;
+  if (noT && t.value === t.defaultValue) t.dataset.d = t.value; else delete t.dataset.d;
+  // B58: a thickness the buyer typed is echoed as typed ("your 1/8 in"), not as if the site chose it.
+  const tMsg = !(tv > 0) ? 'type it in' : t.dataset.d ? `it's set to ${tv} mm` : `we used your ${t.value.trim()}${size(t).bare ? ' mm' : ''}`;
+  render();
   $('#cadmsg').textContent = fileSolid
     ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part, like a blade, foil, mast or tube. These need a two-piece mold, so an engineer prices them. Send it and we'll reply with a price.`
-    : `From ${file.name}: ${what} (${g.units}).${noT ? ` Your file has no thickness, so ${size(qf.elements.pT).v > 0 ? `it's set to ${size(qf.elements.pT).v} mm` : 'type it in'}.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
+    : `From ${file.name}: ${what} (${g.units}).${noT ? ` Your file has no thickness, so ${tMsg}.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
 }
 window.WB = { applyFile };
 
@@ -517,7 +525,7 @@ function setKind(k){
   render();
 }
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setKind(b.dataset.k));
-qf.addEventListener('input', e => { if (e.target.name === 'qty') e.target.dataset.t = 1; needSize = false; render(); });
+qf.addEventListener('input', e => { if (e.target.name === 'qty' || e.target.name === 'mCx') e.target.dataset.t = 1; delete e.target.dataset.d; needSize = false; render(); });
 // No past dates in Need by (B33).
 { const t = new Date(); $('#sf').elements.need.min = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; }
 $('#sf').elements.need.addEventListener('change', needNote);
@@ -536,7 +544,8 @@ function summary(){
     // Converted sizes, e.g. "Thickness 3.2 mm (typed 1/8 in)".
     ...(kind === 'assembly' ? [] : SIZES.map(n => fs(kind).querySelector(`[name="${n}"]`)).filter(Boolean).map(el => [el, size(el)]).filter(([, r]) => r.typed)
       .map(([el, r]) => `${el.parentNode.firstChild.textContent.replace(/\s*\(.*$/, '')} ${r.v} ${el.name === 'rD' ? 'in' : 'mm'} (typed ${r.typed})`)),
-    ...(inchEl && !inchEl.closest('fieldset').hidden && inchEl.value === inchEl.dataset.f ? [`Size from ${pricedFile}: the file has no units, so we assumed inches.`] : []), '',
+    ...(unitEl && !unitEl.closest('fieldset').hidden && unitEl.value === unitEl.dataset.f ? [`Size: ${pricedFile} has no units, so we assumed ${unitAs}.`] : []),
+    ...(kind === 'panel' && pricedFile && qf.elements.pT.dataset.d === qf.elements.pT.value ? [`Thickness: not in ${pricedFile}, so we used ${size(qf.elements.pT).v} mm.`] : []), '',
     ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [`Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
       ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
       `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not binding)${last.only ? '. We\'ll email you a price for your other files.' : ''}`,
