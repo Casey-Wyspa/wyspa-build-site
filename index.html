@@ -414,6 +414,7 @@ function calc(){
     [only ? 'Engineer review (once per order)' : 'Engineer review', price(P.reviewHours, 0)],
   ].filter(Boolean).map(l => [l[0], Math.round(l[1])]);   // B31: whole dollars per line, so the lines add up to the total
   let total = lines.reduce((s, l) => s + l[1], 0);
+  const sub = total;   // B89: before the minimum, kept per file for the "All your files so far" line
   // B67: with several files the minimum is for the whole order, so one file's estimate doesn't add it.
   const belowMin = total < P.minOrder && !only;
   // B32: how many of this part fit inside the minimum order.
@@ -428,11 +429,17 @@ function calc(){
   // Same discount as the Parts line, including the "same total as 50 parts" cap (B41).
   const em = capped ? qtyMult(nb.min) : lm;
   if (em < 1) spec.push(`Volume discount on labor: ${Math.round((1 - em) * 100)}%`);
-  return { q, total, unitP, lines, warn, spec, lead, belowMin, fit, only, wt, kg, hr, underMin: !!only && total < P.minOrder };
+  return { q, total, sub, unitP, lines, warn, spec, lead, belowMin, fit, only, wt, kg, hr };
 }
 
-let fileGeo = null, fileSurf = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '', unitEl = null, unitAs = 'mm';
+let fileGeo = null, fileSurf = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '', pricedKind = '', unitEl = null, unitAs = 'mm';
 const readFiles = new Map(), inch = mm => +(mm / 25.4).toFixed(2);
+// B89: each file's last instant estimate, with the quantity and spec it was priced at, so a second file doesn't erase the first.
+const est = new Map();
+// All attached files with an estimate: one engineer review for the whole order (B67), so the extra review lines are taken off.
+const combo = () => { const fl = cadNames().filter(n => est.has(n)); if (!last.only || fl.length < 2 || !fl.includes(pricedFile)) return null;
+  return { t: fl.reduce((s, n) => s + est.get(n).sub, 0) - (fl.length - 1) * Math.round(price(P.reviewHours, 0)), txt: fl.map(n => `${n} × ${est.get(n).q}`).join(', ') }; };
+const comboLine = C => `All your files: about ${usd(C.t)} (${C.txt}).`;
 // Called by autoquote.js after reading a CAD file: attach it to the request and fill in the fields.
 function applyFile(g, file, sketch) {
   const fi = $('#sf').elements.files, dt = new DataTransfer();
@@ -449,6 +456,8 @@ function applyFile(g, file, sketch) {
   readFiles.set(file.name, !g ? '' : (g.inch ? `${inch(g.L)} × ${inch(g.W)}${g.H ? ` × ${inch(g.H)}` : ''} in` : `${Math.round(g.L)} × ${Math.round(g.W)}${g.H ? ` × ${Math.round(g.H)}` : ''} mm`)
     + (g.holes != null && g.kind === 'panel' ? `, ${g.holes} hole${g.holes === 1 ? '' : 's'}` : '') + (g.kind === 'molded' && g.wall ? (g.wall < 0.5 ? ', wall to confirm' : `, about ${Math.ceil(g.wall * 10 - 1e-9) / 10} mm wall`) : ''));
   if (!g) return render();
+  // B89: a new part keeps the quantity on screen (a default would be just as much a guess), and the file message says what it is.
+  const newPart = !!pricedFile && pricedFile !== file.name;
   pricedFile = file.name;
   fileSurf = g.kind === 'molded' && g.m2 > 0 ? { L: Math.round(g.L), W: Math.round(g.W), H: Math.round(g.H), m2: g.m2 } : null;   // B68: the file's real surface
   // data-f marks a value that came from the file, so the typed-in-inches checks (B36) skip it.
@@ -492,10 +501,11 @@ function applyFile(g, file, sketch) {
   if (noT && t.value === t.defaultValue) t.dataset.d = t.value; else delete t.dataset.d;
   // B58: a thickness the buyer typed is echoed as typed ("your 1/8 in"), not as if the site chose it.
   const tMsg = !(tv > 0) ? 'type it in' : t.dataset.d ? `it's set to ${tv} mm` : `we used the ${t.value.trim()}${size(t).bare ? ' mm' : ''} you typed`;
+  pricedKind = kind;
   render();
   $('#cadmsg').textContent = fileSolid
     ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part, like a blade, foil, mast or tube. These need a two-piece mold, so an engineer prices them. Send it and we'll reply with a price.`
-    : `From ${file.name}: ${what} (${g.units}).${noT ? ` Your file has no thickness, so ${tMsg}.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
+    : `From ${file.name}: ${what} (${g.units}).${newPart ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
 }
 // B88: the upload server (upload-script/Code.gs OK_EXT) only saves these types; keep the two lists the same.
 // Anything else (HEIC, WebP, GIF, Word...) used to be dropped without a word, so refuse it here instead.
@@ -554,6 +564,7 @@ function draw(){
     const sz = SIZES.includes(el.name), v = sz ? size(el).v : parseFloat(el.value), req = sz && el.name !== 'mH';
     return el.value.trim() === '' ? req : !(v >= 0) || (req && v <= 0);
   }) || (!last.manual && !isFinite(last.total)));
+  if (pricedFile && kind === pricedKind && !badSize && !needSize) { if (last.manual) est.delete(pricedFile); else est.set(pricedFile, { sub: last.sub, q: last.q, spec: last.spec[0] }); }
   if (badSize) {
     $('#estlb').textContent = 'Estimate'; $('#tot').style.fontSize = '';
     $('#tot').textContent = '$–'; $('#per').textContent = `Fill in the ${badQty ? 'quantity' : 'size'} to see a price.`;
@@ -575,15 +586,17 @@ function draw(){
     return;
   }
   $('#tot').textContent = usd(last.total);
-  $('#per').textContent = `${last.only ? 'We\'ll email one price for all your files. One engineer review, one minimum. ' : ''}${usd(last.total / last.q)} each, all in · Ready about ${readyRange()} if you approve today`;
-  $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${last.only ? `${last.only} only` : 'Total'}</td><td class="n">${usd(last.total)}</td></tr>`;
+  // B96: the part price first, then the line about all files. B89: with 2+ estimates, one line with their sum.
+  const C = combo();
+  $('#per').textContent = `${usd(last.total / last.q)} each, all in · Ready about ${readyRange()} if you approve today${last.only ? `. ${C ? comboLine(C) : 'We\'ll send one price for all your files. The review and minimum apply once.'}` : ''}`;
+  $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${last.only ? `Total for ${last.only}` : 'Total'}</td><td class="n">${usd(last.total)}</td></tr>`;
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
   const plain = kind === 'panel' && !$('#sf').elements.files.files.length ? [`This price is for a plain rectangle${parseFloat(qf.elements.pHoles.value) > 0 ? ' with holes' : ''}. Send a drawing to price cutouts and shaped edges.`] : [];
   // Honest pointer (market check 2026-10-13): plain solid sheet and stock prop sizes cost less from a catalog. Page only, not the email.
   const fit2 = kind === 'panel' && val('pCore') !== 'core' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
     : kind === 'rotor' && val('rGeo') === 'new' ? ["A stock-size prop usually costs less from a catalog. We're best for custom rotors."] : [];
-  $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...(last.underMin ? [`Minimum order is ${usd(P.minOrder)} for all files combined.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+  $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...(last.only && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 function setKind(k){
@@ -622,11 +635,12 @@ function summary(){
     ...(kind === 'panel' && pricedFile && qf.elements.pT.dataset.d === qf.elements.pT.value ? [`Thickness: not in ${pricedFile}, so we used ${size(qf.elements.pT).v} mm.`] : []), '',
     ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [`Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
       ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
-      `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not binding)${last.only ? '. We\'ll email one price for all your files. One engineer review, one minimum.' : ''}`,
+      `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not binding)${last.only ? `. ${combo() ? `${comboLine(combo())} One engineer review for all files.${combo().t < P.minOrder ? ` Minimum order is ${usd(P.minOrder)} across all files.` : ''}` :'We\'ll send one price for all your files. The review and minimum apply once.'}` : ''}`,
       `Lead time: ${last.lead[0]}–${last.lead[1]} working days after approval (about ${readyRange()} if approved today)`]),
     // B56: one line per other CAD file, with what was read from it.
     ...(() => { const o = cadNames().filter(n => n !== pricedFile);
-      return o.length && cadNames().length > 1 ? ['', ...o.map(n => readFiles.get(n) ? `${n}: ${readFiles.get(n)}. Not priced yet; we'll email a price.` : `${n}: couldn't read it; we'll email a price.`)] : []; })(),
+      // B89: a file priced earlier keeps its spec, quantity and estimate.
+      return o.length && cadNames().length > 1 ? ['', ...o.map(n => est.has(n) ? `${n}: ${est.get(n).spec}. Quantity ${est.get(n).q}, estimate ${usd(est.get(n).sub)} (not binding).` : readFiles.get(n) ? `${n}: ${readFiles.get(n)}. Not priced yet; we'll email a price.` : `${n}: couldn't read it; we'll email a price.`)] : []; })(),
     ...(last.warn.length ? ['', 'Notes:', ...last.warn.map(w => '- ' + w)] : []), '',
     `Name: ${s.name.value}`, `Company: ${s.org.value}`, `Email: ${s.email.value}`, `Need by: ${s.need.value || 'flexible'}${({ sooner: ' (before our lead time, check with shop)', tight: ' (tight, check with shop)' })[needFit()] || ''}`,
     `Application and loads: ${s.notes.value}`, '', UPLOAD_URL ? '' : '[Attach CAD / drawings / sketch]'
