@@ -434,7 +434,7 @@ function applyFile(g, file, sketch) {
   const t = qf.elements.pT, tv = size(t).v;
   if (noT && t.value === t.defaultValue) t.dataset.d = t.value; else delete t.dataset.d;
   // B58: a thickness the buyer typed is echoed as typed ("your 1/8 in"), not as if the site chose it.
-  const tMsg = !(tv > 0) ? 'type it in' : t.dataset.d ? `it's set to ${tv} mm` : `we used your ${t.value.trim()}${size(t).bare ? ' mm' : ''}`;
+  const tMsg = !(tv > 0) ? 'type it in' : t.dataset.d ? `it's set to ${tv} mm` : `we used the ${t.value.trim()}${size(t).bare ? ' mm' : ''} you typed`;
   render();
   $('#cadmsg').textContent = fileSolid
     ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part, like a blade, foil, mast or tube. These need a two-piece mold, so an engineer prices them. Send it and we'll reply with a price.`
