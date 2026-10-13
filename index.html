@@ -320,7 +320,7 @@ function calc(){
     const cutM = fileGeo && fileGeo.L === L && fileGeo.W === W ? Math.max(fileGeo.cutM, 2 * (L + W) / 1000) : 2 * (L + W) / 1000;
     kg = a * (cored ? 2 * skin * m.density + Math.max(coreT, 0) * C.core.density / 1000 + C.core.bondKgM2 : T * m.density);
     cut = holes > 0 || cutM > 2.1 * (L + W) / 1000;   // the weight is for the full rectangle
-    hr = a * (n * C.hrPerM2Ply + f.hrPerM2 + (cored ? C.core.hrPerM2 : 0)) + C.hrPerPart + cutM * C.hrPerMCut + holes * C.hrPerHole;
+    hr = a * (n * C.hrPerM2Ply + (C.bagHrPerM2 || 0) + f.hrPerM2 +(cored ? C.core.hrPerM2 : 0)) + C.hrPerPart + cutM * C.hrPerMCut + holes * C.hrPerHole;
     mat += cons(a, hr);
     setup = price(C.setupHours, 0); lead = P.leadDays.panel;
     const [mx, my] = C.maxSize;
@@ -362,8 +362,8 @@ function calc(){
     const wall = val('mWall') || 1, n = Math.max(1, Math.ceil(wall / m.t - 1e-9));
     const fromFile = fileSurf && fileSurf.L === L && fileSurf.W === W && fileSurf.H === H, a = fromFile ? fileSurf.m2 : (L * W + 2 * H * (L + W)) / 1e6;   // B68: the file's own surface while its sizes are unchanged
     mat = a * n * plyM2(val('mMat'), a * n * q); fabA = a * n * q; fabSave = a * n * m.perM2 - mat;
-    // Thick wet layups cure in stages (about 1,200 gsm of fabric per cure); each extra cure adds bagging time. Prepreg cures once.
-    const cures = val('mMat') === 'prepreg' ? 1 : Math.max(1, Math.ceil(n * m.gsm / M.wetGsmPerCure - 1e-9));
+    // Thick wet layups cure in stages (carbon about 1,200 gsm of fabric per cure, glass its own cureGsm); each extra cure adds bagging time. Prepreg cures once.
+    const cures = val('mMat') === 'prepreg' ? 1 : Math.max(1, Math.ceil(n * m.gsm / (m.cureGsm || M.wetGsmPerCure) - 1e-9));
     hr = M.hrPerPart + M.trimHours + a * (M.hrPerM2 + n * M.hrPerM2Ply) * c.labor + (cures - 1) * (M.hrPerCure + a * M.hrPerM2 * c.labor);
     kg = a * n * m.t * m.density;
     mat += cons(a * cures, hr);

@@ -36,7 +36,8 @@ window.WYSPA_PRICING = {
     prepreg: { label: "Carbon (prepreg)", gsm: 200, t: 0.20, gsmPerMm: 1000, perM2: 137, density: 1.49,      // 3K twill prepreg, ACP $122/yd list x1.3 scrap
                fab: 136.6, vol: [[4.5, 0.90], [9, 0.80], [45, 0.75]] },  // ACP 5-9 yd $109.80, 10-49 yd $97.60, 50+ yd $91.50
     glass:   { label: "Fiberglass",     gsm: 300, t: 0.26, gsmPerMm: 1140, perM2: 28, density: 1.74,       // 7781 E-glass
-               fab: 17.7, vol: [[9, 0.87], [90, 0.83]] },     // Fibre Glast $15.86/yd -> Aircraft Spruce $13.65/yd; Rock West 100 yd roll $13.09/yd
+               fab: 17.7, vol: [[9, 0.87], [90, 0.83]],       // Fibre Glast $15.86/yd -> Aircraft Spruce $13.65/yd; Rock West 100 yd roll $13.09/yd
+               cureGsm: 4500 },                               // glass wet layup per cure (~4 mm): West System lays full skins in one cure; Scott Bader 3 mm/operation polyester scaled to epoxy ~5 mm, x0.8 (judgment)
     hybrid:  { label: "Carbon + glass", gsm: 250, t: 0.24, gsmPerMm: 1040, perM2: 49, density: 1.60,       // average of one carbon + one 7781 ply
                mix: ["carbon", "glass"] },                    // half the area on each fabric's volume prices
   },
@@ -52,7 +53,8 @@ window.WYSPA_PRICING = {
       gloss: { label: "Gloss one side",   perM2: 15, hrPerM2: 0.6 },
       clear: { label: "Clear coat",    perM2: 30, hrPerM2: 1.2 },
     },
-    hrPerM2Ply: 0.08,         // layup per m² per ply. Checked 2026-10-13: 1.9x NREL's flat shear-web rate (24 m²/h/person = 0.042), below its root preform (8 m²/h = 0.125)
+    hrPerM2Ply: 0.042,        // layup per m² per ply: NREL flat shear-web rate, 24 m²/h/person (blade cost model, WISDEM blade_cost.py). Was 0.08 until 2026-10-13
+    bagHrPerM2: 0.36,         // per m² of sheet, one cure: tool prep, peel ply, breather, bag, pull, debag (same NREL model). build_work/research/pricing/panel-bag-and-cures-2026-10-13.md
     hrPerPart: 0.2,           // demold, inspect, handle
     hrPerMCut: 0.09,          // per meter of cut edge: CNC rough + finish pass 0.052 h/m (Amana CFRP chart, 1/4 in bit 23 + 28 in/min, one pass to 6.35 mm)
                               //   + hand edge trim/deburr 0.033 h/m (NREL blade cost model, shear-web trim 30 m/h/person); build_work/research/pricing/panel-hours-2026-10-13.md
@@ -83,7 +85,7 @@ window.WYSPA_PRICING = {
     setupHours: 3,                         // new-mold orders: ply templates, trim fixture, first-part check
     hrPerPart: 2.0, trimHours: 2.0,        // per part: mold prep, bag and cure; trim, sand and drill
     hrPerM2: 1.0, hrPerM2Ply: 1.3,         // layup per m² of surface, plus per ply
-    wetGsmPerCure: 1200,                   // wet layup: at most about 1,200 gsm of dry fabric per cure (3 plies of 400 gsm, a 2025 aircraft repair spec). Prepreg: one cure
+    wetGsmPerCure: 1200,                   // carbon and carbon+glass wet layup: at most about 1,200 gsm of dry fabric per cure (3 plies of 400 gsm, a 2025 aircraft repair spec). Glass uses its own cureGsm. Prepreg: one cure
     hrPerCure: 1.0,                        // each extra cure: re-bag and cure setup (half of hrPerPart), plus hrPerM2 x surface to sand, peel ply and bag again
     tool: { hrMin: 18, hrPerM2: 30, matPerM2: 250 },  // plug + mold; hrMin counted once, the shape's tool factor scales only the area hours (B42, 2026-10-12)
   },
