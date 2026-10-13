@@ -352,9 +352,11 @@ function calc(){
     const wall = val('mWall') || 1, n = Math.max(1, Math.ceil(wall / m.t - 1e-9));
     const a = (L * W + 2 * H * (L + W)) / 1e6;
     mat = a * n * m.perM2;
-    hr = M.hrPerPart + M.trimHours + a * (M.hrPerM2 + n * M.hrPerM2Ply) * c.labor;
+    // Thick wet layups cure in stages (about 1,200 gsm of fabric per cure); each extra cure adds bagging time. Prepreg cures once.
+    const cures = val('mMat') === 'prepreg' ? 1 : Math.max(1, Math.ceil(n * m.gsm / M.wetGsmPerCure - 1e-9));
+    hr = M.hrPerPart + M.trimHours + a * (M.hrPerM2 + n * M.hrPerM2Ply) * c.labor + (cures - 1) * (M.hrPerCure + a * M.hrPerM2 * c.labor);
     kg = a * n * m.t * m.density;
-    mat += cons(a, hr);
+    mat += cons(a * cures, hr);
     if (val('mTool') === 'new') nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) + (c.tool - 1) * a * M.tool.hrPerM2, a * M.tool.matPerM2 * c.tool);  // B42: minimum hours counted once; shape factor scales only the area hours
     if (nre) setup = price(M.setupHours || 0, 0);   // new-mold orders only: ply templates, trim fixture, first-part check (not discounted)
     lead = nre ? P.leadDays.moldedNewMold : P.leadDays.molded;

@@ -73,6 +73,8 @@ window.WYSPA_PRICING = {
     setupHours: 3,                         // new-mold orders: ply templates, trim fixture, first-part check
     hrPerPart: 2.0, trimHours: 2.0,        // per part: mold prep, bag and cure; trim, sand and drill
     hrPerM2: 1.0, hrPerM2Ply: 1.3,         // layup per m² of surface, plus per ply
+    wetGsmPerCure: 1200,                   // wet layup: at most about 1,200 gsm of dry fabric per cure (3 plies of 400 gsm, a 2025 aircraft repair spec). Prepreg: one cure
+    hrPerCure: 1.0,                        // each extra cure: re-bag and cure setup (half of hrPerPart), plus hrPerM2 x surface to sand, peel ply and bag again
     tool: { hrMin: 18, hrPerM2: 30, matPerM2: 250 },  // plug + mold; hrMin counted once, the shape's tool factor scales only the area hours (B42, 2026-10-12)
   },
 
