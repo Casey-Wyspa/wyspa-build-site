@@ -398,10 +398,11 @@ function calc(){
     [`Parts: ${q} × ${usd2(unitP)}${(capped ? qtyMult(nb.min) : lm) < 1 ? ` (${Math.round((1 - (capped ? qtyMult(nb.min) : lm)) * 100)}% off labor only)` : ''}`, unitP * q],
     setup && ['Setup', setup],
     nre && ['Mold (one time)', nre],
-    ['Engineer review', price(P.reviewHours, 0)],
+    [only ? 'Engineer review (once per order)' : 'Engineer review', price(P.reviewHours, 0)],
   ].filter(Boolean).map(l => [l[0], Math.round(l[1])]);   // B31: whole dollars per line, so the lines add up to the total
   let total = lines.reduce((s, l) => s + l[1], 0);
-  const belowMin = total < P.minOrder;
+  // B67: with several files the minimum is for the whole order, so one file's estimate doesn't add it.
+  const belowMin = total < P.minOrder && !only;
   // B32: how many of this part fit inside the minimum order.
   let fit = q;
   if (belowMin) {
@@ -414,7 +415,7 @@ function calc(){
   // Same discount as the Parts line, including the "same total as 50 parts" cap (B41).
   const em = capped ? qtyMult(nb.min) : lm;
   if (em < 1) spec.push(`Volume discount on labor: ${Math.round((1 - em) * 100)}%`);
-  return { q, total, unitP, lines, warn, spec, lead, belowMin, fit, only, wt, kg, hr };
+  return { q, total, unitP, lines, warn, spec, lead, belowMin, fit, only, wt, kg, hr, underMin: !!only && total < P.minOrder };
 }
 
 let fileGeo = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '', unitEl = null, unitAs = 'mm';
@@ -565,7 +566,7 @@ function draw(){
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
   const plain = kind === 'panel' && !$('#sf').elements.files.files.length ? [`This price is for a plain rectangle${parseFloat(qf.elements.pHoles.value) > 0 ? ' with holes' : ''}. Send a drawing to price cutouts and shaped edges.`] : [];
-  $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...last.warn, ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+  $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...last.warn, ...(last.underMin ? [`Every order is at least ${usd(P.minOrder)}, all files together.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 function setKind(k){
