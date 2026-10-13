@@ -293,7 +293,7 @@ const cadNames = () => [...$('#sf').elements.files.files].map(f => f.name).filte
 
 function calc(){
   const q = Math.max(1, Math.round(val('qty') || 1)), warn = [], spec = [], review = [], lm = qtyMult(q), X = P.review;
-  let hr = 0, mat = 0, nre = 0, setup = 0, lead;
+  let hr = 0, mat = 0, nre = 0, setup = 0, lead, kg = 0, cut = false;   // kg: finished part weight from the laminate (areal weight x area, plus core)
   if (kind === 'panel') {
     const L = val('pL'), W = val('pW'), T = val('pT'), holes = Math.max(0, Math.round(val('pHoles') || 0)), m = P.plies[val('pMat')], cored = val('pCore') === 'core', f = P.panel.finish[val('pFin')], C = P.panel;
     // Core = total minus both skins.
@@ -307,6 +307,8 @@ function calc(){
     const a = L * W / 1e6, n = k * lm1.n;
     mat = a * (k * lm1.cost + P.consumablesPerM2 + f.perM2 + (cored ? C.core.perM2mm * Math.max(coreT, 0) : 0));
     const cutM = fileGeo && fileGeo.L === L && fileGeo.W === W ? Math.max(fileGeo.cutM, 2 * (L + W) / 1000) : 2 * (L + W) / 1000;
+    kg = a * (cored ? 2 * skin * m.density + Math.max(coreT, 0) * C.core.density / 1000 + C.core.bondKgM2 : T * m.density);
+    cut = holes > 0 || cutM > 2.1 * (L + W) / 1000;   // the weight is for the full rectangle
     hr = a * (n * C.hrPerM2Ply + f.hrPerM2 + (cored ? C.core.hrPerM2 : 0)) + C.hrPerPart + cutM * C.hrPerMCut + holes * C.hrPerHole;
     setup = price(C.setupHours, 0); lead = P.leadDays.panel;
     const [mx, my] = C.maxSize;
@@ -328,6 +330,7 @@ function calc(){
     const D = val('rD'), B = val('rB'), m = P.plies[val('rMat')], geo = val('rGeo'), R = P.rotor, bm = R.bladeMult[B];
     mat = (R.matBase + D * D * R.matPerIn2) * bm * m.perM2 / P.plies.carbon.perM2;
     hr = (R.hrBase + D * R.hrPerIn) * bm + R.balanceHours;
+    kg = R.kgPerIn2 * D * D * bm;
     if (geo === 'new' || geo === 'design') nre = price((R.mold.hrBase + D * R.mold.hrPerIn) * (B > 2 ? 1.2 : 1), R.mold.matBase + D * R.mold.matPerIn);
     lead = nre ? P.leadDays.rotorNewMold : P.leadDays.rotor;
     if (geo === 'design') review.push('Rotor design by Wyspa');
@@ -346,6 +349,7 @@ function calc(){
     const a = (L * W + 2 * H * (L + W)) / 1e6;
     mat = a * (n * m.perM2 + P.consumablesPerM2);
     hr = M.hrPerPart + M.trimHours + a * (M.hrPerM2 + n * M.hrPerM2Ply) * c.labor;
+    kg = a * n * m.t * m.density;
     if (val('mTool') === 'new') nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) + (c.tool - 1) * a * M.tool.hrPerM2, a * M.tool.matPerM2 * c.tool);  // B42: minimum hours counted once; shape factor scales only the area hours
     if (nre) setup = price(M.setupHours || 0, 0);   // new-mold orders only: ply templates, trim fixture, first-part check (not discounted)
     lead = nre ? P.leadDays.moldedNewMold : P.leadDays.molded;
@@ -369,7 +373,10 @@ function calc(){
     review.push('Assembly');
     spec.push(`Assembly: ${txt('aDesc') || '(none given)'}`, `Overall size: ${txt('aSize') || '?'} mm`);
   }
-  if (review.length) return { q, manual: true, review, spec, warn: [], lines: [] };
+  // Part weight: one short line on the page and in the email. Under 0.1 kg in grams.
+  const wt = kg > 0 && isFinite(kg) ? `About ${kg < 0.1 ? `${Math.max(1, Math.round(kg * 1000))} g` : `${kg < 1 ? kg.toFixed(2) : kg < 10 ? kg.toFixed(1) : Math.round(kg)} kg`} each${cut ? ' before cutouts' : ''}.` : '';
+  if (wt) spec.push(`Weight: ${wt.toLowerCase().slice(0, -1)}`);
+  if (review.length) return { q, manual: true, review, spec, warn: [], lines: [], kg, hr };
   // Never charge more than the next quantity break would (labor discount steps at 10/50/250).
   const nb = P.qtyBreaks.find(b => b.min > q), capped = nb && price(hr * qtyMult(nb.min), mat) * nb.min < price(hr * lm, mat) * q;
   if (capped) warn.push(`Same total as ${nb.min} parts.`);
@@ -397,7 +404,7 @@ function calc(){
   // Same discount as the Parts line, including the "same total as 50 parts" cap (B41).
   const em = capped ? qtyMult(nb.min) : lm;
   if (em < 1) spec.push(`Volume discount on labor: ${Math.round((1 - em) * 100)}%`);
-  return { q, total, unitP, lines, warn, spec, lead, belowMin, fit, only };
+  return { q, total, unitP, lines, warn, spec, lead, belowMin, fit, only, wt, kg, hr };
 }
 
 let fileGeo = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '', unitEl = null, unitAs = 'mm';
@@ -548,7 +555,7 @@ function draw(){
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
   const plain = kind === 'panel' && !$('#sf').elements.files.files.length ? [`This price is for a plain rectangle${parseFloat(qf.elements.pHoles.value) > 0 ? ' with holes' : ''}. Send a drawing to price cutouts and shaped edges.`] : [];
-  $('#warn').innerHTML = [...plain, ...last.warn, ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+  $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...last.warn, ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 function setKind(k){

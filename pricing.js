@@ -22,19 +22,21 @@ window.WYSPA_PRICING = {
   // 2026-10-10: Fibre Glast list prices + epoxy at $39.81/kg x1.5 waste; t from Wyspa laminate engine
   // (Vf 0.50 carbon, 0.45 glass, 0.55 prepreg). Sources: build_work/research/material-costs.md
   // 2026-10-13: cutting scrap x1.2 -> x1.3 (Wyspa's own cost model); prepreg from ACP list (Fibre Glast was the high outlier)
+  // density: cured laminate g/cm³, for part weight (laminate engine: carbon fiber 1.80, E-glass 2.54, epoxy 1.08, prepreg resin 1.10 g/cm³ at the Vf above;
+  //   checks: 2 mm carbon 2.88 kg/m², 2.1 mm glass 3.65 kg/m², 1.94 mm hybrid 3.11 kg/m²; research/pricing/laminate-calibration.md)
   plies: {
-    carbon:  { label: "Carbon fiber",   gsm: 200, t: 0.22, gsmPerMm: 900,  perM2: 70,       // 3K 2x2 twill
+    carbon:  { label: "Carbon fiber",   gsm: 200, t: 0.22, gsmPerMm: 900,  perM2: 70, density: 1.44,      // 3K 2x2 twill
                bulk: { gsm: 670, t: 0.75, perM2mm: 165 } },   // heavy 12K twill for the inside of thick laminates, $ per m² per mm
-    prepreg: { label: "Carbon (prepreg)", gsm: 200, t: 0.20, gsmPerMm: 1000, perM2: 137 },    // 3K twill prepreg, ACP $122/yd list x1.3 scrap
-    glass:   { label: "Fiberglass",     gsm: 300, t: 0.26, gsmPerMm: 1140, perM2: 28 },     // 7781 E-glass
-    hybrid:  { label: "Carbon + glass", gsm: 250, t: 0.24, gsmPerMm: 1040, perM2: 49 },     // average of one carbon + one 7781 ply
+    prepreg: { label: "Carbon (prepreg)", gsm: 200, t: 0.20, gsmPerMm: 1000, perM2: 137, density: 1.49 },    // 3K twill prepreg, ACP $122/yd list x1.3 scrap
+    glass:   { label: "Fiberglass",     gsm: 300, t: 0.26, gsmPerMm: 1140, perM2: 28, density: 1.74 },     // 7781 E-glass
+    hybrid:  { label: "Carbon + glass", gsm: 250, t: 0.24, gsmPerMm: 1040, perM2: 49, density: 1.60 },     // average of one carbon + one 7781 ply
   },
   consumablesPerM2: 20,       // peel ply, bag, breather, release, per m² of part per cure
 
   // Flat panels: laid up flat, cured, CNC cut
   panel: {
     materials: ["carbon", "prepreg", "glass", "hybrid"],
-    core: { label: "Foam core", perM2mm: 7, hrPerM2: 0.4, minT: 3 },  // core $ per m² per mm; thinnest stock foam is 1/8 in (3.2 mm)
+    core: { label: "Foam core", perM2mm: 7, hrPerM2: 0.4, minT: 3, density: 80, bondKgM2: 0.3 },  // core $ per m² per mm; thinnest stock foam is 1/8 in (3.2 mm); H80 foam 80 kg/m³ plus about 0.3 kg/m² bond resin (laminate engine)
     finish: {
       matte: { label: "Matte", perM2: 0,  hrPerM2: 0 },
       gloss: { label: "Gloss one side",   perM2: 15, hrPerM2: 0.6 },
@@ -55,6 +57,7 @@ window.WYSPA_PRICING = {
     hrBase: 1.0, hrPerIn: 0.04,            // layup, press, demold, trim per rotor
     bladeMult: { 2: 1.0, 3: 1.4, 4: 1.8 },
     balanceHours: 0.25,                    // dynamic balance + inspection, per rotor
+    kgPerIn2: 0.00012,                     // weight = k x D² x blade factor = the laminate in matPerIn2 less 30% scrap. 15 in 2-blade: 27 g (T-Motor 15x5 carbon: 21-27.5 g)
     mold: { hrBase: 12, hrPerIn: 1.0, matBase: 100, matPerIn: 8 },  // CNC aluminum mold
   },
 
