@@ -169,8 +169,8 @@ html,body{margin:0;background:#eef2f3}
  <div class="qt">
   <form id="qf" onsubmit="return false">
    <fieldset data-k="panel">
-    <label>Length (max 2400 mm)<input type="text" name="pL" value="600"></label>
-    <label>Width (max 1200 mm)<input type="text" name="pW" value="400"></label>
+    <label>Length (max 2400 mm / 94 in)<input type="text" name="pL" value="600"></label>
+    <label>Width (max 1200 mm / 47 in)<input type="text" name="pW" value="400"></label>
     <label>Thickness (mm or in)<input type="text" name="pT" value="2"></label>
     <label>Material<select name="pMat"></select></label>
     <label>Foam core<select name="pCore"><option value="solid">No, solid</option><option value="core">Yes, foam in the middle</option></select></label>
@@ -228,7 +228,7 @@ html,body{margin:0;background:#eef2f3}
     <label>Email<input name="email" type="email" autocomplete="email" required></label>
     <label>Need by<input name="need" type="date"></label>
     <label class="full">Notes<textarea name="notes" rows="3" placeholder="What it's for, loads, weight or finish targets"></textarea></label>
-    <label class="full" id="up">Files: CAD, drawing or photo (up to 10, 25 MB)<input type="file" name="files" multiple accept=".step,.stp,.iges,.igs,.stl,.obj,.3dm,.dxf,.dwg,.pdf,.sldprt,.sldasm,.x_t,.x_b,.f3d,.png,.jpg,.jpeg,.zip"></label>
+    <label class="full" id="up">Files: CAD, drawing or photo (up to 10, 25 MB)<input type="file" name="files" multiple accept=".step,.stp,.iges,.igs,.stl,.obj,.3dm,.dxf,.dwg,.pdf,.sldprt,.sldasm,.x_t,.x_b,.f3d,.png,.jpg,.jpeg,.zip"><span class="cv" id="filemsg"></span></label>
     <label style="position:absolute;left:-9999px" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off"></label>
    </fieldset>
   </form>
@@ -444,7 +444,7 @@ const comboLine = C => `All your files: about ${usd(C.t)} (${C.txt}).`;
 function applyFile(g, file, sketch) {
   const fi = $('#sf').elements.files, dt = new DataTransfer();
   [...fi.files].filter(f => f.name !== file.name).forEach(f => dt.items.add(f));
-  dt.items.add(file); fi.files = dt.files;
+  dt.items.add(file); fi.files = dt.files; $('#filemsg').textContent = '';
   // Unreadable CAD and untouched sizes: don't show the default part's price as if it were theirs.
   // Sketches (images, PDFs) are just attached; typed sizes keep their price, untouched defaults ask for a size.
   const typed = [...fs(kind).querySelectorAll('input:not([name=qty])')].some(el => el.value !== el.defaultValue && el.value !== '');
@@ -513,12 +513,13 @@ const SEND_OK = /\.(step|stp|iges|igs|stl|obj|3dm|dxf|dwg|pdf|sldprt|sldasm|x_t|
 const canSend = name => SEND_OK.test(name);
 const noSend = name => `We can't take .${name.split('.').pop().toLowerCase()} files. Please use JPG, PNG, PDF or a CAD file.`;
 $('#sf').elements.files.addEventListener('change', e => {
+  // B95: the refusal sits under the Files box and stays until the files change.
   const fi = e.target, bad = [...fi.files].filter(f => !canSend(f.name));
+  $('#filemsg').textContent = bad.length ? noSend(bad[0].name) : '';
   if (!bad.length) return;
   const dt = new DataTransfer();
   [...fi.files].filter(f => canSend(f.name)).forEach(f => dt.items.add(f));
   fi.files = dt.files;
-  $('#msg').textContent = noSend(bad[0].name);
 });
 window.WB = { applyFile, canSend, noSend };
 
@@ -592,9 +593,11 @@ function draw(){
   $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${last.only ? `Total for ${last.only}` : 'Total'}</td><td class="n">${usd(last.total)}</td></tr>`;
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
-  const plain = kind === 'panel' && !$('#sf').elements.files.files.length ? [`This price is for a plain rectangle${parseFloat(qf.elements.pHoles.value) > 0 ? ' with holes' : ''}. Send a drawing to price cutouts and shaped edges.`] : [];
+  const noFile = kind === 'panel' && !$('#sf').elements.files.files.length, holes = parseFloat(qf.elements.pHoles.value) > 0;
+  const plain = noFile ? [`This price is for a plain rectangle${holes ? ' with holes' : ''}. Send a drawing to price cutouts and shaped edges.`] : [];
   // Honest pointer (market check 2026-10-13): plain solid sheet and stock prop sizes cost less from a catalog. Page only, not the email.
-  const fit2 = kind === 'panel' && val('pCore') !== 'core' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
+  // B93: only for a typed plain rectangle (no file, no holes); a cut part is custom.
+  const fit2 = noFile && !holes && val('pCore') !== 'core' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
     : kind === 'rotor' && val('rGeo') === 'new' ? ["A stock-size prop usually costs less from a catalog. We're best for custom rotors."] : [];
   $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...(last.only && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
@@ -659,7 +662,7 @@ $('#go').onclick = async () => {
   if (!UPLOAD_URL) return mailto();
   const files = [...sf.elements.files.files];
   const bad = files.find(f => !canSend(f.name));
-  if (bad) return void ($('#msg').textContent = noSend(bad.name));
+  if (bad) return void ($('#filemsg').textContent = noSend(bad.name));
   if (files.length > 10) return void ($('#msg').textContent = 'Up to 10 files, please. Zip them if you have more.');
   if (files.reduce((t, f) => t + f.size, 0) > 25e6) return void ($('#msg').textContent = 'Files are over 25 MB. Zip them, or send without them and we will send you an upload link.');
   go.disabled = true; $('#msg').textContent = files.length ? `Uploading ${files.length} file${files.length > 1 ? 's' : ''}…` : 'Sending…';
