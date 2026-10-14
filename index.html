@@ -286,6 +286,10 @@ SIZES.forEach(n => qf.querySelector(`[name="${n}"]`).insertAdjacentHTML('afteren
 // A bare number the buyer typed (not from a file) that is too small to be mm: "Is it in inches? Type 10 in." (B36).
 const typedIn = n => { const el = fs(kind).querySelector(`[name="${n}"]`); return size(el).bare && el.value !== el.dataset.f ? ` Type ${el.value.trim()} in.` : ''; };
 const small = (n, what, min) => { const h = typedIn(n); return h && val(n) < min ? `${what} under ${min} mm. Is it in inches?${h}` : ''; };
+// B114: what a rotor quantity means. Under the rotor price and as one line in every rotor email.
+const ROTOR_NOTE = "Price is per rotor, not per pair. All rotors in this quote spin the same way. Need the other direction? Say so in the notes. It needs its own mold, and we'll price it after an engineer checks your part.";
+// B112: what "Outer layers" means, under the field while it shows no unit conversion.
+const SKIN_HINT = 'Thickness of each carbon or glass skin on the foam. Set to 1 mm to start. Change it to match your design.';
 const qtyMult = q =>P.qtyBreaks.filter(b => q >= b.min).pop().mult;
 // Pricing method: labor hours x rate + materials x materialMult
 const price = (hours, mat) => hours * P.rate + mat * P.materialMult;
@@ -337,7 +341,9 @@ function calc(){
     // B69: skins take mm or inches like the other sizes; a bare tiny number asks about inches, like Thickness.
     if (cored && skin < X.minSkin) review.push(`Outer layers under ${X.minSkin} mm${typedIn('pSkin') ? `. Is it in inches?${typedIn('pSkin')}` : ''}`);
     if (cored && coreT > X.maxCoreToSkin * skin) review.push('Thin outer layers on a thick core');
-    spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins (about ${Math.round(skin * m.gsmPerMm)} gsm each)${coreT > 0 ? ` on ${+coreT.toFixed(1)} mm foam core` : ''}` : `solid (about ${Math.round(T * m.gsmPerMm)} gsm)`}, ${f.label}, ${holes} holes, ${cutM.toFixed(1)} m of cutting`);
+    // B115: no gsm (layup) in a review email; the engineer works it out.
+    const rv = review.length > 0;
+    spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins${rv ? '' : ` (about ${Math.round(skin * m.gsmPerMm)} gsm each)`}${coreT > 0 ? ` on ${+coreT.toFixed(1)} mm foam core` : ''}` : `solid${rv ? '' : ` (about ${Math.round(T * m.gsmPerMm)} gsm)`}`}, ${f.label}, ${holes} holes, ${cutM.toFixed(1)} m of cutting`);
   } else if (kind === 'rotor') {
     const D = val('rD'), B = val('rB'), m = P.plies[val('rMat')], geo = val('rGeo'), R = P.rotor, bm = R.bladeMult[B];
     const eq = (R.matBase + D * D * R.matPerIn2) * bm / P.plies.carbon.perM2;   // rotor material as m² of carbon ply
@@ -391,7 +397,7 @@ function calc(){
       wallQ = wall < 0.5 && wEl.value === wEl.dataset.f;
       if (wall < 0.5) review.push(`Wall under 0.5 mm. ${wallQ ? 'Is the file in inches?' : `Is it in inches?${typedIn('mWall')}`}`);
     }
-    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${+a.toPrecision(3)} m² ${fromFile ? 'surface, measured from your file' : 'surface, estimated from your dimensions'}), ${wallQ ? 'wall to confirm' : `${wall} mm wall (${n} ${n === 1 ? 'ply' : 'plies'})`}, ${m.label}, ${c.label}, ${nre ? 'new mold' : 'repeat order, our existing mold'}`);
+    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${+a.toPrecision(3)} m² ${fromFile ? 'surface, measured from your file' : 'surface, estimated from your dimensions'}), ${wallQ ? 'wall to confirm' : `${wall} mm wall${review.length ? '' : ` (${n} ${n === 1 ? 'ply' : 'plies'})`}`}, ${m.label}, ${c.label}, ${nre ? 'new mold' : 'repeat order, our existing mold'}`);
   } else {
     const txt = n => fs('assembly').querySelector(`[name="${n}"]`).value.trim();
     review.push('Assembly');
@@ -399,8 +405,12 @@ function calc(){
   }
   // Part weight: one short line on the page and in the email. Under 0.1 kg in grams.
   const wt = kg > 0 && isFinite(kg) ? `About ${kg < 0.1 ? `${Math.max(1, Math.round(kg * 1000))} g` : `${kg < 1 ? kg.toFixed(2) : kg < 10 ? kg.toFixed(1) : Math.round(kg)} kg`} each${cut ? ' before cutouts' : ''}.` : '';
-  if (wt) spec.push(`Weight: ${wt.toLowerCase().slice(0, -1)}`);
-  if (fabSave > 0.005) spec.push(`Fabric at volume prices: about ${Math.round(fabA)} m² for this order`);
+  // B115: a part sent to review gets no weight, ply or fabric numbers (they came out as "38 kg each" for an unconfirmed size).
+  if (review.length) { if (kind !== 'assembly') spec.push('Weight and layup: an engineer will work these out with your price.'); }
+  else {
+    if (wt) spec.push(`Weight: ${wt.toLowerCase().slice(0, -1)}`);
+    if (fabSave > 0.005) spec.push(`Fabric at volume prices: about ${Math.round(fabA)} m² for this order`);
+  }
   if (review.length) return { q, manual: true, review, spec, warn: [], lines: [], kg, hr };
   // Never charge more than the next quantity break would (labor discount steps at 10/50/250).
   const nb = P.qtyBreaks.find(b => b.min > q), capped = nb && price(hr * qtyMult(nb.min), mat) * nb.min < price(hr * lm, mat) * q;
@@ -474,7 +484,9 @@ function applyFile(g, file, sketch, picked) {
   if (kind === 'rotor') {
     // A file means they have a design; keep "Repeat order" if they picked it (B17).
     put('rD', Math.max(3, r(g.L / 25.4 * 2) / 2)); if (val('rGeo') === 'design') put('rGeo', 'new');
-    what = `${qf.elements.rD.value} in diameter`;
+    // B117: say which unit the file was read in, with the mm it measured, not "22 in diameter (assumed mm)".
+    what = `${qf.elements.rD.value} in diameter (${/^assumed inches/.test(g.units) ? 'no units in the file, so we assumed inches'
+      : /^(assumed mm|read as mm)/.test(g.units) ? `${r(g.L)} mm across; no units in the file, so we assumed mm` : `${r(g.L)} mm across, ${g.units}`})`;
   } else if (kind === 'assembly') {
     what = `${r(g.L)} × ${r(g.W)} mm overall`;
   } else if (g.kind === 'panel') {
@@ -514,7 +526,7 @@ function applyFile(g, file, sketch, picked) {
   render();
   $('#cadmsg').textContent = fileSolid
     ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part, like a blade, foil, mast or tube. These need a two-piece mold, so an engineer prices them. Send it and we'll reply with a price.`
-    : `From ${file.name}: ${what} (${g.units}).${moved ? ' This part isn\'t flat, so we priced it as a molded part.' : ''}${newPart ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
+    : `From ${file.name}: ${what}${kind === 'rotor' ? '' : ` (${g.units})`}.${moved ? ' This part isn\'t flat, so we priced it as a molded part.' : ''}${newPart ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
   ctx.msg = $('#cadmsg').textContent.replace(QNOTE, '');
 }
 // B88: the upload server (upload-script/Code.gs OK_EXT) only saves these types; keep the two lists the same.
@@ -569,7 +581,7 @@ function draw(){
   // Empty, zero or negative sizes (common while retyping on a phone): no price, never $NaN or a negative part price.
   const badQty = !(parseFloat(fs(kind).querySelector('[name=qty]').value) >= 1);
   // Show "1/8 in = 3.2 mm" under a field only when its unit was converted.
-  SIZES.forEach(n => { const el = qf.querySelector(`[name="${n}"]`); el.nextElementSibling.textContent = size(el).note || ''; });
+  SIZES.forEach(n => { const el = qf.querySelector(`[name="${n}"]`); el.nextElementSibling.textContent = size(el).note || (n === 'pSkin' ? SKIN_HINT : ''); });
   badSize = badQty || kind !== 'assembly' && ([...fs(kind).querySelectorAll('input:not([name=qty]):not([name=pHoles])')].some(el => {
     if (el.closest('[hidden]')) return false;   // pSkin while the panel is solid
     const sz = SIZES.includes(el.name), v = sz ? size(el).v : parseFloat(el.value), req = sz && el.name !== 'mH';
@@ -586,7 +598,7 @@ function draw(){
     $('#estlb').textContent = 'Quote'; $('#tot').textContent = 'Engineer quote'; $('#tot').style.fontSize = 'clamp(30px,4vw,40px)';
     $('#per').textContent = kind === 'assembly' ? 'Send it with your files. We reply with a price.' : 'We need to look at this one. Send it and we reply with a price.';
     $('#lines').innerHTML = '';
-    $('#warn').innerHTML = kind === 'assembly' ? '' : `Why: ${last.review.join(' · ')}`;
+    $('#warn').innerHTML = kind === 'assembly' ? '' : `<div>Why: ${last.review.join(' · ')}</div>${kind === 'rotor' ? `\n<div>${ROTOR_NOTE}</div>` : ''}`;
     return;
   }
   // B48: several CAD files, one priced. Say so in the label, not just a note.
@@ -612,7 +624,7 @@ function draw(){
   // stock catalog items; carbon + glass sheet isn't, so no line for it.
   const fit2 = noFile && !holes && val('pCore') !== 'core' && val('pMat') !== 'hybrid' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
     : kind === 'rotor' && val('rGeo') === 'new' ? ["A stock-size prop usually costs less from a catalog. We're best for custom rotors."] : [];
-  $('#warn').innerHTML = [...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...(last.only && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}${typed ? ' More than one part? Send each one. We\'ll price them together as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+  $('#warn').innerHTML = [...(kind === 'rotor' ? [ROTOR_NOTE] : []), ...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...(last.only && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}${typed ? ' More than one part? Send each one. We\'ll price them together as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 function setKind(k, byFile){
@@ -654,7 +666,7 @@ function summary(){
   const s = $('#sf').elements;
   return [
     `Wyspa Build ${last.manual ? 'review' : 'quote'} request ${qid}`, '',
-    ...last.spec.map(l => l.replace(/NaN/g, '?')), `Quantity: ${last.q}`,   // blank sizes (B49 sketch) read "?", not NaN
+    ...last.spec.map(l => l.replace(/NaN/g, '?')), `Quantity: ${last.q}`, ...(kind === 'rotor' ? [ROTOR_NOTE] : []),   // blank sizes (B49 sketch) read "?", not NaN
     // Converted sizes, e.g. "Thickness 3.2 mm (typed 1/8 in)".
     ...(kind === 'assembly' ? [] : SIZES.map(n => fs(kind).querySelector(`[name="${n}"]`)).filter(el => el && !el.closest('[hidden]')).map(el => [el, size(el)]).filter(([, r]) => r.typed)
       .map(([el, r]) => `${el.parentNode.firstChild.textContent.replace(/\s*\(.*$/, '')} ${r.v} ${el.name === 'rD' ? 'in' : 'mm'} (typed ${r.typed})`)),
