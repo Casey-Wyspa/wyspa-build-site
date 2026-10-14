@@ -43,7 +43,7 @@ window.WYSPA_PRICING = {
                mix: ["carbon", "glass"] },                    // half the area on each fabric's volume prices
   },
   consumablesPerM2: 20,       // peel ply, bag, breather, release, per m² of part per cure: the floor
-  consumablesPerHour: 15,     // consumables per part labor hour, as a composite shop billed them (2025 invoice, actual); the larger of the two is used
+  consumablesPerHour: 15,     // shop supplies per part labor hour (abrasives, tape, gloves, solvent; bag film billed separately), 2025 shop invoice, actual. On panel cut/drill hours it also stands for cutter and drill wear: $1.35/m and $0.30/hole vs sourced $1.6-5.3/m and $0.09-0.15/hole. The larger of this and consumablesPerM2 is used
 
   // Flat panels: laid up flat, cured, CNC cut
   panel: {
