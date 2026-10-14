@@ -280,7 +280,8 @@
     // No units (STL) and tiny: almost certainly drawn in inches, same rule as DXF. Small-ish: ask.
     if (U === 'assumed mm' && a < 25) { s = 25.4; [a, b, c, wall] = [a, b, c, wall].map(v => v * 25.4); U = "assumed inches; change the size if that's wrong"; }
     else if (U === 'assumed mm' && a < 60) U = "read as mm; if it's in inches, fix the size";
-    if (c <= Math.max(wall * 1.5, 0.5) || c < 0.04 * b) return { kind: 'panel', L: a, W: b, T: c, units: U, ...plateEdges(t, ax, c / s, s) };
+    // B107: shallow (under 4% of the width) is flat only if the depth is under 3 walls; a shallow dome or open surface is molded.
+    if (c <= Math.max(wall * 1.5, 0.5) || c < 0.04 * b && c <= 3 * wall) return { kind: 'panel', L: a, W: b, T: c, units: U, ...plateEdges(t, ax, c / s, s) };
     const m2 = oneSide * s * s / 1e6, shape = m2 * 1e6 / (a * b);   // mold-side surface (m²) vs. footprint
     return { kind: 'molded', L: a, W: b, H: c, wall, m2, complex: shape > 2.5, units: U };
   }

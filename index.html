@@ -446,7 +446,7 @@ const comboLine = C => `All your files: about ${usd(C.t)} (${C.txt}).`;
 const tabFile = {}, fileCtx = new Map();
 const QNOTE = / Quantity is still \S+ from your last part\. Change it if needed\./;   // B101: dropped once the quantity is edited
 // Called by autoquote.js after reading a CAD file: attach it to the request and fill in the fields.
-function applyFile(g, file, sketch) {
+function applyFile(g, file, sketch, picked) {
   const fi = $('#sf').elements.files, dt = new DataTransfer();
   [...fi.files].filter(f => f.name !== file.name).forEach(f => dt.items.add(f));
   dt.items.add(file); fi.files = dt.files; $('#filemsg').textContent = '';
@@ -468,6 +468,7 @@ function applyFile(g, file, sketch) {
   // data-f marks a value that came from the file, so the typed-in-inches checks (B36) skip it.
   const r = Math.round, put = (n, v) => { const el = qf.querySelector(`[name="${n}"]`); el.value = v; el.dataset.f = el.value; };
   let what;
+  const moved = !picked && kind === 'panel' && g.kind === 'molded';   // B107: a 3D file dropped on Flat panel that isn't flat
   if (kind === 'rotor') {
     // A file means they have a design; keep "Repeat order" if they picked it (B17).
     put('rD', Math.max(3, r(g.L / 25.4 * 2) / 2)); if (val('rGeo') === 'design') put('rGeo', 'new');
@@ -511,7 +512,7 @@ function applyFile(g, file, sketch) {
   render();
   $('#cadmsg').textContent = fileSolid
     ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part, like a blade, foil, mast or tube. These need a two-piece mold, so an engineer prices them. Send it and we'll reply with a price.`
-    : `From ${file.name}: ${what} (${g.units}).${newPart ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
+    : `From ${file.name}: ${what} (${g.units}).${moved ? ' This part isn\'t flat, so we priced it as a molded part.' : ''}${newPart ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
   ctx.msg = $('#cadmsg').textContent.replace(QNOTE, '');
 }
 // B88: the upload server (upload-script/Code.gs OK_EXT) only saves these types; keep the two lists the same.
@@ -617,7 +618,7 @@ function setKind(k, byFile){
   const t = !byFile && k !== kind && tabFile[k], f = t && t.f, back = f && cadNames().includes(f);
   // B104: Flat or Molded with no file of its own takes the size of the 3D file just read, never the defaults.
   const g = !byFile && !back && k !== kind && pricedFile && /^(panel|molded)$/.test(k) && fileCtx.get(pricedFile)?.g, fo = g && [...$('#sf').elements.files.files].find(x => x.name === pricedFile);
-  if (fo && (g.H || g.T) > 0) return applyFile(k === 'panel' ? { ...g, kind: k, T: g.wall, m2: 0 } : { ...g, kind: k, H: g.H || g.T, wall: 0 }, fo);
+  if (fo && (g.H || g.T) > 0) return applyFile(k === 'panel' ? { ...g, kind: k, T: g.wall, m2: 0 } : { ...g, kind: k, H: g.H || g.T, wall: 0 }, fo, false, true);
   if (back) {
     const c = t.c;
     pricedFile = f; pricedKind = k; ({ fileSurf, fileGeo, fileSolid, unitEl, unitAs } = c);
