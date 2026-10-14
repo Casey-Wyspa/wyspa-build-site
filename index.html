@@ -349,7 +349,7 @@ function calc(){
     if (cored && coreT > X.maxCoreToSkin * skin) review.push('Thin outer layers on a thick core');
     // B115: no gsm (layup) in a review email; the engineer works it out.
     const rv = review.length > 0;
-    spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins${rv ? '' : ` (about ${Math.round(skin * m.gsmPerMm)} gsm each)`}${coreT > 0 ? ` on ${+coreT.toFixed(1)} mm foam core` : ''}` : `solid${rv ? '' : ` (about ${Math.round(T * m.gsmPerMm)} gsm)`}`}, ${f.label}, ${holes} holes, ${cutM.toFixed(1)} m of cutting`);
+    spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins${rv ? '' : ` (about ${Math.round(skin * m.gsmPerMm)} gsm each)`}${coreT > 0 ? ` on ${+coreT.toFixed(1)} mm foam core` : ''}` : `solid${rv ? '' : ` (about ${Math.round(T * m.gsmPerMm)} gsm)`}`}, ${f.label}, ${holeTxt(holes, fileGeo && fileGeo.L === L && fileGeo.W === W && fileGeo.holes === holes ? fileGeo.round : null)}, ${cutM.toFixed(1)} m of cutting`);
   } else if (kind === 'rotor') {
     const D = val('rD'), B = val('rB'), m = P.plies[val('rMat')], geo = val('rGeo'), R = P.rotor, bm = R.bladeMult[B];
     const eq = (R.matBase + D * D * R.matPerIn2) * bm / P.plies.carbon.perM2;   // rotor material as m² of carbon ply
@@ -464,6 +464,12 @@ function calc(){
 
 let fileGeo = null, fileSurf = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '', pricedKind = '', unitEl = null, unitAs = 'mm';
 const readFiles = new Map(), inch = mm => +(mm / 25.4).toFixed(2);
+// B122: "9 holes, 3 cutouts" when the file told round holes from other cutouts (rd = round ones of n); words only, the price uses n.
+function holeTxt(n, rd) {
+  const pl = (k, w) => `${k} ${w}${k === 1 ? '' : 's'}`;
+  if (rd == null || !(rd >= 0 && rd <= n) || !n) return pl(n, 'hole');
+  return [rd && pl(rd, 'hole'), n - rd && pl(n - rd, 'cutout')].filter(Boolean).join(', ');
+}
 // B89: each file's last instant estimate, with the quantity and spec it was priced at, so a second file doesn't erase the first.
 const est = new Map();
 // All attached files with an estimate: one engineer review for the whole order (B67), so the extra review lines are taken off.
@@ -489,7 +495,7 @@ function applyFile(g, file, sketch, picked) {
   if (sketch) $('#cadmsg').textContent = typed ? 'File attached. We\'ll use it with the sizes you typed.' : 'File attached. Type the size to see a price.';
   // B56: what was read from each file, for the email lines about files we don't price ('' = nothing read).
   readFiles.set(file.name, !g ? '' : (g.inch ? `${inch(g.L)} × ${inch(g.W)}${g.H ? ` × ${inch(g.H)}` : ''} in` : `${Math.round(g.L)} × ${Math.round(g.W)}${g.H ? ` × ${Math.round(g.H)}` : ''} mm`)
-    + (g.holes != null && g.kind === 'panel' ? `, ${g.holes} hole${g.holes === 1 ? '' : 's'}` : '') + (g.kind === 'molded' && g.wall ? (g.wall < 0.5 ? ', wall to confirm' : `, about ${Math.ceil(g.wall * 10 - 1e-9) / 10} mm wall`) : ''));
+    + (g.holes != null && g.kind === 'panel' ? `, ${holeTxt(g.holes, g.round)}` : '') + (g.kind === 'molded' && g.wall ? (g.wall < 0.5 ? ', wall to confirm' : `, about ${Math.ceil(g.wall * 10 - 1e-9) / 10} mm wall`) : ''));
   if (!g) return render();
   // B89: a new part keeps the quantity on screen (a default would be just as much a guess), and the file message says what it is.
   const newPart = [...fileCtx.keys()].some(n => n !== file.name && cadNames().includes(n));
@@ -512,9 +518,9 @@ function applyFile(g, file, sketch, picked) {
     put('pL', r(g.L)); put('pW', r(g.W));
     if (g.T > 0.2) put('pT', Math.max(0.3, +g.T.toFixed(1)));
     put('pHoles', g.holes != null ? g.holes : 0);   // 3D flat plates: holes and cut length come from the side walls (B39); if unreadable, 0
-    fileGeo = g.cutM ? { L: r(g.L), W: r(g.W), cutM: g.cutM } : null;
+    fileGeo = g.cutM ? { L: r(g.L), W: r(g.W), cutM: g.cutM, holes: g.holes, round: g.round } : null;
     // B57: an inch file's size is shown in inches first: "36 × 24 in (914 × 610 mm)". The fields stay in mm.
-    what = `${g.inch ? `${inch(g.L)} × ${inch(g.W)} in (${r(g.L)} × ${r(g.W)} mm)` : `${r(g.L)} × ${r(g.W)} mm`}${g.T > 0.2 ? ` × ${g.T.toFixed(1)} mm` : ''}${g.holes != null ? `, ${g.holes} holes` : ''}${g.cutM ? `, ${g.cutM.toFixed(1)} m of cutting` : ''}`;
+    what = `${g.inch ? `${inch(g.L)} × ${inch(g.W)} in (${r(g.L)} × ${r(g.W)} mm)` : `${r(g.L)} × ${r(g.W)} mm`}${g.T > 0.2 ? ` × ${g.T.toFixed(1)} mm` : ''}${g.holes != null ? `, ${holeTxt(g.holes, g.round)}` : ''}${g.cutM ? `, ${g.cutM.toFixed(1)} m of cutting` : ''}`;
   } else {
     setKind('molded', true);
     // Keep the buyer's Mold choice: a repeat customer who uploads a file still has our mold (B35).
