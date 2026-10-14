@@ -83,7 +83,7 @@ html,body{margin:0;background:#eef2f3}
 .wb .warn:empty{display:none}
 .wb .warn div+div{margin-top:8px}
 .wb .note{font-size:13px;color:var(--muted);margin-top:12px}
-.wb .cv{font:400 13px var(--b);color:var(--sea);text-transform:none;letter-spacing:0}
+.wb .cv{font:400 13px var(--b);color:var(--sea);text-transform:none;letter-spacing:0;overflow-wrap:anywhere}
 .wb .cv:empty{display:none}
 .wb .send{margin-top:28px;padding-top:24px;border-top:1px solid var(--rule)}
 .wb .send fieldset{margin-top:16px}
@@ -269,17 +269,26 @@ const fs = k => qf.querySelector(`fieldset[data-k="${k}"]`);
 // Sizes can be typed in mm or inches (B34): "3", "3 mm", "0.125 in", '1/8"', "1 1/2 in", "1-1/2". A fraction with no unit is inches.
 // Returns the value in the field's unit (inches for rD, mm for the rest), NaN if unreadable, and a note when the unit was converted.
 const SIZES = ['pL', 'pW', 'pT', 'pSkin', 'rD', 'mL', 'mW', 'mH', 'mWall'];
+const NUM = /^(?:(\d+(?:\.\d*)?|\.\d+)|(?:(\d+)(?:\s+|\s*-\s*))?(\d+)\s*\/\s*(\d+))\s*(mm|cm|in|inch|inches|")?$/;
 function size(el){
-  const fu = el.name === 'rD' ? 'in' : 'mm', s = el.value.trim().toLowerCase().replace(/[”″]|''/g, '"');
-  const m = s.match(/^(?:(\d+(?:\.\d*)?|\.\d+)|(?:(\d+)(?:\s+|\s*-\s*))?(\d+)\s*\/\s*(\d+))\s*(mm|cm|in|inch|inches|")?$/);
-  if (!m) return { v: NaN };
-  const num = m[1] != null ? +m[1] : +(m[2] || 0) + m[3] / m[4];
-  const u = m[5] ? (m[5] === 'mm' || m[5] === 'cm' ? m[5] : 'in') : m[1] != null ? fu : 'in';
+  const fu = el.name === 'rD' ? 'in' : 'mm', s = el.value.trim().toLowerCase().replace(/[”″]|''/g, '"').replace(/[’′]/g, "'");
+  // B128: feet, or feet and inches: "3 ft", "1.5 ft", "1' 6\"", "1 ft 6 in" (the inches may be bare or a fraction).
+  const ft = s.match(/^(\d+(?:\.\d*)?|\.\d+)\s*(?:ft|feet|foot|')\s*(.*)$/), fi = ft && ft[2] && ft[2].match(NUM);
+  let m, num, u, said;
+  if (ft && (!ft[2] || fi && (!fi[5] || !/^(mm|cm)$/.test(fi[5])))) {
+    num = +ft[1] * 12 + (fi ? (fi[1] != null ? +fi[1] : +(fi[2] || 0) + fi[3] / fi[4]) : 0); u = 'in'; said = el.value.trim();
+  } else {
+    m = s.match(NUM);
+    if (!m) return { v: NaN };
+    num = m[1] != null ? +m[1] : +(m[2] || 0) + m[3] / m[4];
+    u = m[5] ? (m[5] === 'mm' || m[5] === 'cm' ? m[5] : 'in') : m[1] != null ? fu : 'in';
+  }
   if (!isFinite(num)) return { v: NaN };
-  if (u === fu) return { v: num, bare: !m[5] && m[1] != null };
+  if (u === fu && !said) return { v: num, bare: !m[5] && m[1] != null };
   const x = num * { mm: 1, cm: 10, in: 25.4 }[u] / (fu === 'in' ? 25.4 : 1), v = +(x + 1e-9).toFixed(x < 1 || u === 'in' ? 2 : 1);   // B54: inches to mm keep 2 decimals (1/4 in = 6.35, 1/8 in = 3.18 mm; 1e-9 so 3.175 rounds up)
-  const typed = `${m[1] != null ? m[1] : `${m[2] ? m[2] + ' ' : ''}${m[3]}/${m[4]}`} ${u}`;
-  return { v, typed, note: `${typed} = ${v} ${fu}` };
+  const raw = said || (m[1] != null ? m[1] : `${m[2] ? m[2] + ' ' : ''}${m[3]}/${m[4]}`), typed = said || `${raw} ${u}`;
+  // B131: a bare fraction is read as inches; the email says so instead of claiming "in" was typed.
+  return { v, typed, imp: u === 'in', said: said || m[5] ? `typed ${typed}` : `you typed ${raw}, we read it as inches`, note: `${typed} = ${v} ${fu}` };
 }
 const val = n => { const el = fs(kind).querySelector(`[name="${n}"]`); return el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.value : SIZES.includes(n) ? size(el).v : parseFloat(el.value); };
 SIZES.forEach(n => qf.querySelector(`[name="${n}"]`).insertAdjacentHTML('afterend', '<span class="cv"></span>'));
@@ -290,7 +299,7 @@ let unitQ = new Set();
 const UQ = s => (s && unitQ.add(s), s);
 const small = (n, what, min) => { const h = typedIn(n); return h && val(n) < min ? UQ(`${what} under ${min} mm. Is it in inches?${h}`) : ''; };
 // B118: typed with an inch unit, not a bare number (fractions count as inches).
-const inchIn = n => / in$/.test(size(fs(kind).querySelector(`[name="${n}"]`)).typed || '');
+const inchIn = n => !!size(fs(kind).querySelector(`[name="${n}"]`)).imp;   // B128: feet count too
 // B114: what a rotor quantity means. Under the rotor price and as one line in every rotor email.
 const ROTOR_NOTE = "Price is per rotor, not per pair. All rotors in this quote spin the same way. Need the other direction? Say so in the notes. It needs its own mold, and we'll price it after an engineer checks your part.";
 // B112: what "Outer layers" means, under the field while it shows no unit conversion.
@@ -330,7 +339,11 @@ function calc(){
     const cutM = fileGeo && fileGeo.L === L && fileGeo.W === W ? Math.max(fileGeo.cutM, 2 * (L + W) / 1000) : 2 * (L + W) / 1000;
     kg = a * (cored ? 2 * skin * m.density + Math.max(coreT, 0) * C.core.density / 1000 + C.core.bondKgM2 : T * m.density);
     cut = holes > 0 || cutM > 2.1 * (L + W) / 1000;   // the weight is for the full rectangle
-    hr = a * (n * C.hrPerM2Ply + (C.bagHrPerM2 || 0) + f.hrPerM2 +(cored ? C.core.hrPerM2 : 0)) + C.hrPerPart + cutM * C.hrPerMCut + holes * C.hrPerHole;
+    // B132: a DXF's hole edges are already in cutM, and hrPerHole is the time for a whole hole including its edge, so each
+    // DXF hole pays the larger of the two, not both. Typed holes and STEP holes (no edge lengths) keep hrPerHole each.
+    const hl = fileGeo && fileGeo.L === L && fileGeo.W === W && fileGeo.holes === holes && fileGeo.holeM;
+    const holeHr = hl ? hl.reduce((t, m) => t + Math.max(0, C.hrPerHole - m * C.hrPerMCut), 0) : holes * C.hrPerHole;
+    hr = a * (n * C.hrPerM2Ply + (C.bagHrPerM2 || 0) + f.hrPerM2 +(cored ? C.core.hrPerM2 : 0)) + C.hrPerPart + cutM * C.hrPerMCut + holeHr;
     mat += cons(a, hr);
     setup = price(C.setupHours, 0); lead = P.leadDays.panel;
     const [mx, my] = C.maxSize;
@@ -367,8 +380,11 @@ function calc(){
     spec.push(`Rotor ${mmQ ? `diameter to confirm (typed ${rEl.value.trim()}, no unit)` : `${D} in diameter`}, ${B}-blade, ${m.label}, mold: ${fs('rotor').querySelector('[name=rGeo]').selectedOptions[0].text}`);
   } else if (kind === 'molded') {
     const L = val('mL'), W = val('mW'), H = val('mH') || 0, cx = qf.elements.mCx;
-    // B52: until the buyer picks a shape, pick Open or Deep from the sizes (same rule as for files).
-    if (!cx.dataset.t && cx.value !== 'complex' && Math.min(L, W) > 0) cx.value = H / Math.min(L, W) <= 0.5 ? 'simple' : 'medium';   // B90: depth = half the width is Open
+    // Units questions first (B130): a bare Length or Width under 25, or a bare Depth next to inch sizes.
+    const sL = small('mL', 'Length', 25), sW = small('mW', 'Width', 25), hEl = fs('molded').querySelector('[name=mH]'), hv = hEl.value.trim();
+    const hQ = (inchIn('mL') || inchIn('mW') || sL || sW) && size(hEl).bare && hEl.value !== hEl.dataset.f && H > 0 && H <= 60;   // B118; over 60 can't be inches here (B36 range)
+    // B52: until the buyer picks a shape, pick Open or Deep from the sizes (same rule as for files). Not while a unit is in doubt (B130).
+    if (!cx.dataset.t && cx.value !== 'complex' && Math.min(L, W) > 0 && !sL && !sW && !hQ) cx.value = H / Math.min(L, W) <= 0.5 ? 'simple' : 'medium';   // B90: depth = half the width is Open
     const m = P.plies[val('mMat')], c = P.molded.complexity[cx.value], M = P.molded;
     // Wall thickness in mm -> whole plies of the chosen fabric, rounded up
     const wall = val('mWall') || 1, n = Math.max(1, Math.ceil(wall / m.t - 1e-9));
@@ -381,7 +397,7 @@ function calc(){
     hr = (M.hrPerPart + M.trimHours) * sz + a * (M.hrPerM2 + n * (m.layHrPerM2Ply || M.hrPerM2Ply)) * c.labor + (cures - 1) * (M.hrPerCure * sz + a * M.hrPerM2 * c.labor);
     kg = a * n * m.t * m.density;
     mat += cons(a * cures, hr); cycles = cures;
-    if (val('mTool') === 'new') nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) + (c.tool - 1) * a * M.tool.hrPerM2, a * M.tool.matPerM2 * c.tool);  // B42: minimum hours counted once; shape factor scales only the area hours
+    if (val('mTool') === 'new') nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) + (c.tool - 1) * a * M.tool.hrPerM2, a * ((val('mMat') === 'prepreg' && M.tool.matPerM2Prepreg) || M.tool.matPerM2) * c.tool);  // B42: minimum hours counted once; shape factor scales only the area hours
     if (nre) setup = price(M.setupHours || 0, 0);   // new-mold orders only: ply templates, trim fixture, first-part check (not discounted)
     lead = nre ? P.leadDays.moldedNewMold : P.leadDays.molded;
     let wallQ = false;   // B60: a file wall too thin to be real (likely inches) is written "wall to confirm", not the misread number
@@ -397,11 +413,9 @@ function calc(){
       if (HK && kg >= (X.moldedHrPerKgMinKg || 0) && (hk < HK[0] || hk > HK[1])) review.push(hk < HK[0] ? 'Wall is too thick for this size' : 'Wall is too thin for this size');   // few hours per kg = a heavy, thick wall
       // Small, thick parts (e.g. a 60 g bracket with a 3.4 mm wall): a shop would press-mold or machine them, not bag them wet in 3 cures.
       if (X.moldedSmallKg && kg < X.moldedSmallKg && n * m.gsm > X.moldedSmallGsm) review.push('Small, thick molded part');
-      const sL = small('mL', 'Length', 25), sW = small('mW', 'Width', 25);
       review.push(...[sL, sW].filter(Boolean));
       // B118: Length or Width in inches (typed "in", a fraction, or a bare number we just asked about) and a bare Depth: ask which unit.
-      const hEl = fs('molded').querySelector('[name=mH]'), hv = hEl.value.trim();
-      if ((inchIn('mL') || inchIn('mW') || sL || sW) && size(hEl).bare && hEl.value !== hEl.dataset.f && H > 0 && H <= 60) review.push(UQ(`Depth ${hv}: mm or inches? Type ${hv} mm or ${hv} in.`));   // over 60 can't be inches here (B36 range)
+      if (hQ) review.push(UQ(`Depth ${hv}: mm or inches? Type ${hv} mm or ${hv} in.`));
       // B37: only blame the file when the wall came from one.
       const wEl = fs('molded').querySelector('[name=mWall]');
       wallQ = wall < 0.5 && wEl.value === wEl.dataset.f;
@@ -424,12 +438,15 @@ function calc(){
   // Part weight: one short line on the page and in the email. Under 0.1 kg in grams.
   const wt = kg > 0 && isFinite(kg) ? `About ${kg < 0.1 ? `${Math.max(1, Math.round(kg * 1000))} g` : `${kg < 1 ? kg.toFixed(2) : kg < 10 ? kg.toFixed(1) : Math.round(kg)} kg`} each${cut ? ' before cutouts' : ''}.` : '';
   // B115: a part sent to review gets no weight, ply or fabric numbers (they came out as "38 kg each" for an unconfirmed size).
-  if (review.length) { if (kind !== 'assembly') spec.push('Weight and layup: an engineer will work these out with your price.'); }
+  // B115 also for reasons found after the spec line was written (order too large for an instant ready date): drop the gsm and plies.
+  if (review.length) { spec[0] = spec[0].replace(/ \(about \d+ gsm(?: each)?\)| \(\d+ pl(?:y|ies)\)/g, ''); if (kind !== 'assembly') spec.push('Weight and layup: an engineer will work these out with your price.'); }
   else {
     if (wt) spec.push(`Weight: ${wt.toLowerCase().slice(0, -1)}`);
     if (fabSave > 0.005) spec.push(`Fabric at volume prices: about ${Math.round(fabA)} m² for this order`);
   }
-  if (review.length) return { q, manual: true, units: review.every(r => unitQ.has(r)), review, spec, warn: [], lines: [], kg, hr };
+  // B130: any open units question comes first ("Check your sizes"); the other reasons may only come from the misread size.
+  const uq = review.filter(r => unitQ.has(r));
+  if (review.length) return { q, manual: true, units: uq.length > 0, review: uq.length ? uq : review, spec, warn: [], lines: [], kg, hr };
   // Never charge more than the next quantity break would (labor discount steps at 10/50/250).
   const nb = P.qtyBreaks.find(b => b.min > q), capped = nb && price(hr * qtyMult(nb.min), mat) * nb.min < price(hr * lm, mat) * q;
   if (capped) warn.push(`Same total as ${nb.min} parts.`);
@@ -472,6 +489,8 @@ function holeTxt(n, rd) {
 }
 // B89: each file's last instant estimate, with the quantity and spec it was priced at, so a second file doesn't erase the first.
 const est = new Map();
+// B127: the same for a file sent to review (no estimate), so its quantity, sizes and reason stay in the email after a tab switch.
+const rvw = new Map();
 // All attached files with an estimate: one engineer review for the whole order (B67), so the extra review lines are taken off.
 const combo = () => { const fl = cadNames().filter(n => est.has(n)); if (!last.only || fl.length < 2 || !fl.includes(pricedFile)) return null;
   return { t: fl.reduce((s, n) => s + est.get(n).sub, 0) - (fl.length - 1) * Math.round(price(P.reviewHours, 0)), txt: fl.map(n => `${n} × ${est.get(n).q}`).join(', '),
@@ -518,7 +537,7 @@ function applyFile(g, file, sketch, picked) {
     put('pL', r(g.L)); put('pW', r(g.W));
     if (g.T > 0.2) put('pT', Math.max(0.3, +g.T.toFixed(1)));
     put('pHoles', g.holes != null ? g.holes : 0);   // 3D flat plates: holes and cut length come from the side walls (B39); if unreadable, 0
-    fileGeo = g.cutM ? { L: r(g.L), W: r(g.W), cutM: g.cutM, holes: g.holes, round: g.round } : null;
+    fileGeo = g.cutM ? { L: r(g.L), W: r(g.W), cutM: g.cutM, holes: g.holes, round: g.round, holeM: g.holeM } : null;
     // B57: an inch file's size is shown in inches first: "36 × 24 in (914 × 610 mm)". The fields stay in mm.
     what = `${g.inch ? `${inch(g.L)} × ${inch(g.W)} in (${r(g.L)} × ${r(g.W)} mm)` : `${r(g.L)} × ${r(g.W)} mm`}${g.T > 0.2 ? ` × ${g.T.toFixed(1)} mm` : ''}${g.holes != null ? `, ${holeTxt(g.holes, g.round)}` : ''}${g.cutM ? `, ${g.cutM.toFixed(1)} m of cutting` : ''}`;
   } else {
@@ -607,13 +626,18 @@ function draw(){
   // Empty, zero or negative sizes (common while retyping on a phone): no price, never $NaN or a negative part price.
   const badQty = !(parseFloat(fs(kind).querySelector('[name=qty]').value) >= 1);
   // Show "1/8 in = 3.2 mm" under a field only when its unit was converted.
-  SIZES.forEach(n => { const el = qf.querySelector(`[name="${n}"]`); el.nextElementSibling.textContent = size(el).note || (n === 'pSkin' ? SKIN_HINT : ''); });
+  // B128: a size we can't read says so under its field, not only "Fill in the size".
+  SIZES.forEach(n => { const el = qf.querySelector(`[name="${n}"]`), r = size(el), t = el.value.trim();
+    el.nextElementSibling.textContent = r.note || (t && isNaN(r.v) ? `We can't read "${t}". Type it like 24 in or 610 mm.` : n === 'pSkin' ? SKIN_HINT : ''); });
   badSize = badQty || kind !== 'assembly' && ([...fs(kind).querySelectorAll('input:not([name=qty]):not([name=pHoles])')].some(el => {
     if (el.closest('[hidden]')) return false;   // pSkin while the panel is solid
     const sz = SIZES.includes(el.name), v = sz ? size(el).v : parseFloat(el.value), req = sz && el.name !== 'mH';
     return el.value.trim() === '' ? req : !(v >= 0) || (req && v <= 0);
   }) || (!last.manual && !isFinite(last.total)));
-  if (pricedFile && kind === pricedKind && !badSize && !needSize) { if (last.manual) est.delete(pricedFile); else est.set(pricedFile, { sub: last.sub, q: last.q, spec: last.spec[0], lead: last.lead }); }
+  if (pricedFile && kind === pricedKind && !badSize && !needSize) {
+    if (last.manual) { est.delete(pricedFile); rvw.set(pricedFile, { q: last.q, spec: last.spec[0], why: last.review, units: last.units }); }
+    else { est.set(pricedFile, { sub: last.sub, q: last.q, spec: last.spec[0], lead: last.lead }); rvw.delete(pricedFile); }
+  }
   if (badSize) {
     $('#estlb').textContent = 'Estimate'; $('#tot').style.fontSize = '';
     $('#tot').textContent = '$–'; $('#per').textContent = `Fill in the ${badQty ? 'quantity' : 'size'} to see a price.`;
@@ -702,9 +726,9 @@ function summary(){
   return [
     `Wyspa Build ${last.manual ? 'review' : 'quote'} request ${qid}`, '',
     ...last.spec.map(l => l.replace(/NaN/g, '?')), `Quantity: ${last.q}`, ...(kind === 'rotor' ? [ROTOR_NOTE] : []),   // blank sizes (B49 sketch) read "?", not NaN
-    // Converted sizes, e.g. "Thickness 3.2 mm (typed 1/8 in)".
+    // Converted sizes, e.g. "Thickness 3.2 mm (typed 1/8 in)", or "(typed 1/8, read as inches)" when no unit was typed (B131).
     ...(kind === 'assembly' ? [] : SIZES.map(n => fs(kind).querySelector(`[name="${n}"]`)).filter(el => el && !el.closest('[hidden]')).map(el => [el, size(el)]).filter(([, r]) => r.typed)
-      .map(([el, r]) => `${el.parentNode.firstChild.textContent.replace(/\s*\(.*$/, '')} ${r.v} ${el.name === 'rD' ? 'in' : 'mm'} (typed ${r.typed})`)),
+      .map(([el, r]) => `${el.parentNode.firstChild.textContent.replace(/\s*\(.*$/, '')} ${r.v} ${el.name === 'rD' ? 'in' : 'mm'} (${r.said})`)),
     ...(unitEl && !unitEl.closest('fieldset').hidden && unitEl.value === unitEl.dataset.f ? [`Size: ${pricedFile} has no units, so we assumed ${unitAs}.`] : []),
     ...(kind === 'panel' && pricedFile && qf.elements.pT.dataset.d === qf.elements.pT.value ? [`Thickness: not in ${pricedFile}, so we used ${size(qf.elements.pT).v} mm.`] : []), '',
     ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [last.units ? `No price yet. Please check these sizes: ${last.review.join(' ')}` : `Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
@@ -715,7 +739,8 @@ function summary(){
     // B56: one line per other CAD file, with what was read from it.
     ...(() => { const o = cadNames().filter(n => n !== pricedFile);
       // B89: a file priced earlier keeps its spec, quantity and estimate.
-      return o.length && cadNames().length > 1 ? ['', ...o.map(n => est.has(n) ? `${n}: ${est.get(n).spec}. Quantity ${est.get(n).q}, estimate ${usd(est.get(n).sub)} (not binding).` : readFiles.get(n) ? `${n}: ${readFiles.get(n)}. Not priced yet; we'll email a price.` : `${n}: couldn't read it; we'll email a price.`)] : []; })(),
+      return o.length && cadNames().length > 1 ? ['', ...o.map(n => est.has(n) ? `${n}: ${est.get(n).spec}. Quantity ${est.get(n).q}, estimate ${usd(est.get(n).sub)} (not binding).`
+        : rvw.has(n) ? `${n}: ${rvw.get(n).spec.replace(/NaN/g, '?')}. Quantity ${rvw.get(n).q}. ${rvw.get(n).units ? `No price yet. Check these sizes: ${rvw.get(n).why.join(' ')}` : `An engineer needs to price this: ${rvw.get(n).why.join('; ')}`}`.replace(/\.?$/, '.') : readFiles.get(n) ? `${n}: ${readFiles.get(n)}. Not priced yet; we'll email a price.` : `${n}: couldn't read it; we'll email a price.`)] : []; })(),
     ...(last.warn.length ? ['', 'Notes:', ...last.warn.map(w => '- ' + w)] : []), '',
     `Name: ${s.name.value}`, `Company: ${s.org.value}`, `Email: ${s.email.value}`, `Need by: ${s.need.value || 'flexible'}${({ sooner: ' (before our lead time, check with shop)', tight: ' (tight, check with shop)' })[needFit()] || ''}`,
     `Application and loads: ${s.notes.value}`, '', UPLOAD_URL ? '' : '[Attach CAD / drawings / sketch]'

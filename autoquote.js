@@ -170,7 +170,9 @@
     const loops = inner.filter(s => s.closed);
     if (part.bb === bb && loops.length) loops.splice(loops.indexOf(loops.reduce((a, s) => area(s) > area(a) ? s : a)), 1);
     const round = Math.min(Math.max(0, holes), loops.filter(isRound).length);
-    return { kind: 'panel', L: (x1 - x0) * scale, W: (y1 - y0) * scale, cutM: part.len * scale / 1000, holes: Math.max(0, holes), round, units, inch: uc === 1 };
+    // B132: each hole's edge length (m), so the page doesn't charge a hole's edge twice (it's already in cutM).
+    const holeM = loops.length === Math.max(0, holes) ? loops.map(s => s.len * scale / 1000) : null;
+    return { kind: 'panel', L: (x1 - x0) * scale, W: (y1 - y0) * scale, cutM: part.len * scale / 1000, holes: Math.max(0, holes), round, holeM, units, inch: uc === 1 };
   }
 
   // ---------- 3D meshes ----------
@@ -278,7 +280,7 @@
       const k = [key(i), key(i + 3), key(i + 6)];
       for (let j = 0; j < 3; j++) { const e = [k[j], k[(j + 1) % 3]].sort().join('|'); edges.set(e, (edges.get(e) || 0) + 1); }
     }
-    const oneSide = [...edges.values()].some(v => v === 1) ? area : area / 2;
+    const open = [...edges.values()].some(v => v === 1), oneSide = open ? area : area / 2;
     vol = Math.abs(vol);
     // B104: an open surface (a Rhino cover exported as a surface) has no volume or wall; its "volume" depends on where the origin is.
     // Tested by shape, not shared edges, since STEP faces are meshed apart even on a closed solid.
@@ -289,7 +291,51 @@
     // B107: shallow (under 4% of the width) is flat only if the depth is under 3 walls; a shallow dome or open surface is molded.
     if (c <= Math.max(wall * 1.5, 0.5) || c < 0.04 * b && c <= 3 * wall) return { kind: 'panel', L: a, W: b, T: c, units: U, ...plateEdges(t, ax, c / s, s) };
     const m2 = oneSide * s * s / 1e6, shape = m2 * 1e6 / (a * b);   // mold-side surface (m²) vs. footprint
-    return { kind: 'molded', L: a, W: b, H: c, wall, m2, complex: shape > 2.5, units: U };
+    // B125, in file units. The gap is capped at half the depth: an open surface can give a made-up wall (B104), and a wall
+    // over a quarter of the depth is already "closed or solid" on the page.
+    const wrap = wrapFrac(t, ax, lo, hi, Math.max(Math.min(3 * wall / s, 0.5 * ext[ax]), 0.15 * ext[ax]), !open);
+    return { kind: 'molded', L: a, W: b, H: c, wall, m2, complex: shape > 2.5 || wrap > 0.35, units: U };
+  }
+
+  // B125: a part that wraps around (a tube, duct or closed box) has skin on both the top and the bottom along the pull
+  // direction, so it can't come out of a one-piece open mold. A grid of rays along the depth axis counts the separate
+  // skins each ray crosses; the two faces of one solid wall are closer than `gap`, so they count as one. Open trays,
+  // covers, domes and canopies give one skin per ray. Returns the share of rays that hit the part and cross 2+ skins.
+  // solid (every edge shared): a skin is a stretch inside material, from where the ray goes in to where it comes out
+  // (faces facing the other way), and skins must have air between them. So an L-bracket read along its length, which is
+  // 40 mm of material in one go, is one skin, not two. An open surface has no inside: each face it crosses is a skin.
+  function wrapFrac(t, ax, lo, hi, gap, solid) {
+    const u = (ax + 1) % 3, v = (ax + 2) % 3, N = 32, du = (hi[u] - lo[u]) / N, dv = (hi[v] - lo[v]) / N, j = 0.0137;   // j: off the grid lines of square parts
+    if (!(du > 0 && dv > 0 && gap > 0)) return 0;
+    const hits = Array.from({ length: N * N }, () => []);
+    const rng = (a, b, l, d) => [Math.max(0, Math.ceil((a - l) / d - 0.5 - j)), Math.min(N - 1, Math.floor((b - l) / d - 0.5 - j))];
+    for (let i = 0; i + 8 < t.length; i += 9) {
+      const x0 = t[i + u], y0 = t[i + v], x1 = t[i + 3 + u], y1 = t[i + 3 + v], x2 = t[i + 6 + u], y2 = t[i + 6 + v];
+      const d = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+      if (!(Math.abs(d) > 0)) continue;   // edge-on to the rays: a side wall
+      const [a0, a1] = rng(Math.min(x0, x1, x2), Math.max(x0, x1, x2), lo[u], du), [b0, b1] = rng(Math.min(y0, y1, y2), Math.max(y0, y1, y2), lo[v], dv);
+      for (let a = a0; a <= a1; a++) for (let b = b0; b <= b1; b++) {
+        const x = lo[u] + (a + 0.5 + j) * du, y = lo[v] + (b + 0.5 + j) * dv;
+        const l1 = ((x - x0) * (y2 - y0) - (x2 - x0) * (y - y0)) / d, l2 = ((x1 - x0) * (y - y0) - (x - x0) * (y1 - y0)) / d;
+        if (l1 < 0 || l2 < 0 || l1 + l2 > 1) continue;
+        hits[a * N + b].push([t[i + ax] + l1 * (t[i + 3 + ax] - t[i + ax]) + l2 * (t[i + 6 + ax] - t[i + ax]), Math.sign(d)]);
+      }
+    }
+    // Two faces at the same height facing opposite ways (a tray exported as outer box minus inner box, both with a
+    // bottom at the open rim) cancel out: there's no material there.
+    const eps = 1e-4 * (hi[ax] - lo[ax]);
+    let hit = 0, two = 0;
+    for (const h0 of hits) {
+      h0.sort((p, q) => p[0] - q[0]);
+      const h = [];
+      for (const p of h0) { const k = h.findIndex(o => o[1] === -p[1] && Math.abs(o[0] - p[0]) <= eps); if (k >= 0) h.splice(k, 1); else h.push(p); }
+      if (!h.length) continue;
+      hit++;
+      let n = 0, end = 0, sum = 0, air = false;
+      for (const [z, g] of h) { if (!sum) { if (n++ && z - end > gap) air = true; } sum += g; if (!sum) end = z; }
+      if (solid && !sum ? air : h.some((z, k) => k && z[0] - h[k - 1][0] > gap)) two++;   // in and out don't match up: count faces
+    }
+    return hit ? two / hit : 0;
   }
 
   // Flat plate from a 3D file (B39): the side walls are the cut edges. Their area ÷ thickness = total cut length

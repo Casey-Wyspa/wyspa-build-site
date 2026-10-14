@@ -89,7 +89,9 @@ window.WYSPA_PRICING = {
     hrPerM2: 1.0, hrPerM2Ply: 1.3,         // layup per m² of surface, plus per ply (carbon, prepreg, carbon+glass: X2; glass uses plies.glass.layHrPerM2Ply)
     wetGsmPerCure: 4000,                   // carbon and carbon+glass wet layup in a mold: about 4,000 gsm of dry fabric per cure (20 plies, ~4.4 mm; same resin mass per cure as glass cureGsm; West System, Gurit, PRO-SET, Scott Bader). Was 1,200 from an on-aircraft joint repair spec (B108). Glass uses its own cureGsm. Prepreg: one cure
     hrPerCure: 1.0,                        // each extra cure: re-bag and cure setup (half of hrPerPart), plus hrPerM2 x surface to sand, peel ply and bag again
-    tool: { hrMin: 18, hrPerM2: 30, matPerM2: 250 },  // plug + mold; hrMin counted once, the shape's tool factor scales only the area hours (B42, 2026-10-12)
+    tool: { hrMin: 18, hrPerM2: 30, matPerM2: 250,   // plug + mold; hrMin counted once, the shape's tool factor scales only the area hours (B42, 2026-10-12)
+            matPerM2Prepreg: 2476 },   // prepreg cures hot, so its mold is a heat-proof carbon tooling laminate: Wyspa job cost model, mold material = 2x part material = $2,476 per m² of part
+                                       // (cross-check: 16 plies x $137/m²/ply list prepreg = $2,192). Wet, glass and hybrid keep $250 (room-temperature mold vendor quote). 2026-10-14
   },
 
   // Anything past these limits gets no instant price; it goes to engineer review instead
