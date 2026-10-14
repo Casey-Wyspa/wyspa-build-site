@@ -150,7 +150,7 @@ html,body{margin:0;background:#eef2f3}
  <ol class="steps">
   <li><h3>Get a price</h3><p>Type the size or drop a file. You see a price in seconds.</p></li>
   <li><h3>Send it</h3><p>An engineer checks the layers and replies with a firm quote.</p></li>
-  <li><h3>Approve it</h3><p>Say yes to the firm quote. We build your parts and ship them.</p></li>
+  <li><h3>Approve it</h3><p>Say yes and pay half up front by card or bank transfer, or send a PO. We build and ship your parts.</p></li>
  </ol>
 </section>
 
@@ -176,7 +176,7 @@ html,body{margin:0;background:#eef2f3}
     <label>Foam core<select name="pCore"><option value="solid">No, solid</option><option value="core">Yes, foam in the middle</option></select></label>
     <label id="pSkinL" hidden>Outer layers, each side (mm or in)<input type="text" name="pSkin" value="1"></label>
     <label>Finish<select name="pFin"></select></label>
-    <label>Holes per panel<input type="number" name="pHoles" value="0" min="0" step="1"></label>
+    <label>Holes and cutouts per panel<input type="number" name="pHoles" value="0" min="0" step="1"></label>
     <label>Quantity<input type="number" name="qty" value="10" min="1" step="1"></label>
    </fieldset>
    <fieldset data-k="rotor" hidden>
@@ -336,12 +336,17 @@ function calc(){
     const lamCost = k * (lm1.f * plyM2(val('pMat'), aF) + (lm1.bmm ? lm1.bmm * (b.perM2mm - (b.fabPerMm || 0) * (1 - vm(b.vol, aB))) : 0));
     fabA = aF + aB; fabSave = a * (k * lm1.cost - lamCost);
     mat = a * (lamCost + f.perM2 + (cored ? C.core.perM2mm * Math.max(coreT, 0) : 0));
-    const cutM = fileGeo && fileGeo.L === L && fileGeo.W === W ? Math.max(fileGeo.cutM, 2 * (L + W) / 1000) : 2 * (L + W) / 1000;
+    // B133: sizes within 5% of the file's (a retyped 300 -> 300.5) keep the file's cut length and hole edges, scaled to the
+    // new size. A bigger change is a different part: priced as a rectangle with the holes in the field, and the page says so.
+    const near = (v, f) => f > 0 && v > 0 && Math.abs(v / f - 1) <= 0.05;
+    const fsc = fileGeo && pricedFile && near(L, fileGeo.L) && near(W, fileGeo.W) ? (L + W) / (fileGeo.L + fileGeo.W) : 0;
+    const cutM = fsc ? Math.max(fileGeo.cutM * fsc, 2 * (L + W) / 1000) : 2 * (L + W) / 1000;
+    if (fileGeo && !fsc && pricedFile && L > 0 && W > 0) warn.push(`Priced as a plain rectangle with ${holes} ${holes === 1 ? 'hole or cutout' : 'holes or cutouts'}. The sizes you typed differ from your file by more than 5%. To price your file's exact shape, match the sizes to the file.`);
     kg = a * (cored ? 2 * skin * m.density + Math.max(coreT, 0) * C.core.density / 1000 + C.core.bondKgM2 : T * m.density);
     cut = holes > 0 || cutM > 2.1 * (L + W) / 1000;   // the weight is for the full rectangle
     // B132: a DXF's hole edges are already in cutM, and hrPerHole is the time for a whole hole including its edge, so each
     // DXF hole pays the larger of the two, not both. Typed holes and STEP holes (no edge lengths) keep hrPerHole each.
-    const hl = fileGeo && fileGeo.L === L && fileGeo.W === W && fileGeo.holes === holes && fileGeo.holeM;
+    const hl = fsc && fileGeo.holes === holes && fileGeo.holeM && fileGeo.holeM.map(m => m * fsc);
     const holeHr = hl ? hl.reduce((t, m) => t + Math.max(0, C.hrPerHole - m * C.hrPerMCut), 0) : holes * C.hrPerHole;
     hr = a * (n * C.hrPerM2Ply + (C.bagHrPerM2 || 0) + f.hrPerM2 +(cored ? C.core.hrPerM2 : 0)) + C.hrPerPart + cutM * C.hrPerMCut + holeHr;
     mat += cons(a, hr);
@@ -362,7 +367,7 @@ function calc(){
     if (cored && coreT > X.maxCoreToSkin * skin) review.push('Thin outer layers on a thick core');
     // B115: no gsm (layup) in a review email; the engineer works it out.
     const rv = review.length > 0;
-    spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins${rv ? '' : ` (about ${Math.round(skin * m.gsmPerMm)} gsm each)`}${coreT > 0 ? ` on ${+coreT.toFixed(1)} mm foam core` : ''}` : `solid${rv ? '' : ` (about ${Math.round(T * m.gsmPerMm)} gsm)`}`}, ${f.label}, ${holeTxt(holes, fileGeo && fileGeo.L === L && fileGeo.W === W && fileGeo.holes === holes ? fileGeo.round : null)}, ${cutM.toFixed(1)} m of cutting`);
+    spec.push(`Flat panel ${L} × ${W} × ${T} mm total, ${m.label}, ${cored ? `${skin} mm skins${rv ? '' : ` (about ${Math.round(skin * m.gsmPerMm)} gsm each)`}${coreT > 0 ? ` on ${+coreT.toFixed(1)} mm foam core` : ''}` : `solid${rv ? '' : ` (about ${Math.round(T * m.gsmPerMm)} gsm)`}`}, ${f.label}, ${holeTxt(holes, fsc && fileGeo.holes === holes ? fileGeo.round : null)}, ${cutM.toFixed(1)} m of cutting`);
   } else if (kind === 'rotor') {
     const D = val('rD'), B = val('rB'), m = P.plies[val('rMat')], geo = val('rGeo'), R = P.rotor, bm = R.bladeMult[B];
     const eq = (R.matBase + D * D * R.matPerIn2) * bm / P.plies.carbon.perM2;   // rotor material as m² of carbon ply
@@ -446,7 +451,7 @@ function calc(){
   }
   // B130: any open units question comes first ("Check your sizes"); the other reasons may only come from the misread size.
   const uq = review.filter(r => unitQ.has(r));
-  if (review.length) return { q, manual: true, units: uq.length > 0, review: uq.length ? uq : review, spec, warn: [], lines: [], kg, hr };
+  if (review.length) return { q, manual: true, units: uq.length > 0, review: uq.length ? uq : review, spec, warn: [], lines: [], kg, hr, lead };   // B136: lead kept for the Need-by check
   // Never charge more than the next quantity break would (labor discount steps at 10/50/250).
   const nb = P.qtyBreaks.find(b => b.min > q), capped = nb && price(hr * qtyMult(nb.min), mat) * nb.min < price(hr * lm, mat) * q;
   if (capped) warn.push(`Same total as ${nb.min} parts.`);
@@ -560,10 +565,9 @@ function applyFile(g, file, sketch, picked) {
   unitAs = /^assumed inches/.test(g.units) ? 'inches' : 'mm';   // "read as mm; if it's in inches, ..." is mm
   // B45: a 2D file has no thickness, so say which thickness we used (B55: data-d keeps it for the email until the buyer types one).
   const noT = kind === 'panel' && !(g.T > 0.2);
-  const t = qf.elements.pT, tv = size(t).v;
+  const t = qf.elements.pT;
   if (noT && t.value === t.defaultValue) t.dataset.d = t.value; else delete t.dataset.d;
-  // B58: a thickness the buyer typed is echoed as typed ("your 1/8 in"), not as if the site chose it.
-  const tMsg = !(tv > 0) ? 'type it in' : t.dataset.d ? `it's set to ${tv} mm` : `we used the ${t.value.trim()}${size(t).bare ? ' mm' : ''} you typed`;
+  const tMsg = thickMsg();
   const ctx = { fileSurf, fileGeo, fileSolid, unitEl, unitAs, msg: '', g };
   pricedKind = kind; tabFile[kind] = { f: file.name, c: ctx }; fileCtx.set(file.name, ctx);
   render();
@@ -572,6 +576,14 @@ function applyFile(g, file, sketch, picked) {
     : `From ${file.name}: ${what}${kind === 'rotor' ? '' : ` (${g.units})`}.${moved ? ' This part isn\'t flat, so we priced it as a molded part.' : ''}${newPart ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
   ctx.msg = $('#cadmsg').textContent.replace(QNOTE, '');
 }
+// B58: a thickness the buyer typed is echoed as typed ("your 1/8 in"), not as if the site chose it.
+function thickMsg(){ const t = qf.elements.pT, tv = size(t).v;
+  return !(tv > 0) ? 'type it in' : t.dataset.d ? `it's set to ${tv} mm` : `we used the ${t.value.trim()}${size(t).bare ? ' mm' : ''} you typed`; }
+// B134: typing a thickness after the file was read updates the file message's thickness sentence (and the copy kept for the tab).
+const TMSG = /( Your file has no thickness, so )(?:type it in|it's set to \S+ mm|we used the .*? you typed)\./;
+function thickNote(){ const el = $('#cadmsg'); if (!TMSG.test(el.textContent)) return;
+  el.textContent = el.textContent.replace(TMSG, (_, a) => `${a}${thickMsg()}.`);
+  const c = pricedFile && pricedKind === 'panel' && fileCtx.get(pricedFile); if (c) c.msg = el.textContent.replace(QNOTE, ''); }
 // B88: the upload server (upload-script/Code.gs OK_EXT) only saves these types; keep the two lists the same.
 // Anything else (HEIC, WebP, GIF, Word...) used to be dropped without a word, so refuse it here instead.
 const SEND_OK = /\.(step|stp|iges|igs|stl|obj|3dm|dxf|dwg|pdf|sldprt|sldasm|x_t|x_b|f3d|png|jpe?g|zip)$/i;
@@ -601,10 +613,12 @@ const shortDate = d => d.toLocaleDateString('en-US', { month: 'short', day: 'num
 const readyRange = L => { const [a, b] = readyDates(L); return `${shortDate(a)}–${a.getMonth() === b.getMonth() ? b.getDate() : shortDate(b)}`; };
 // 'sooner', 'tight' or '' comparing the Need-by date with the ready range (only when there is an instant price).
 // B124: with 2+ priced files, check the whole order's ready date (its slowest part), the one the headline shows.
-const orderLead = () => combo()?.lead || last.lead;
+// B136: a part sent to engineer review (not a units question) still has our usual lead time as its earliest date,
+// so the check uses it with the other priced files' dates.
+const orderLead = () => combo()?.lead || (last.manual ? [0, 1].map(i => Math.max(last.lead[i], ...cadNames().filter(n => n !== pricedFile && est.has(n)).map(n => est.get(n).lead[i]))) : last.lead);
 function needFit(){
   const v = $('#sf').elements.need.value;
-  if (!v || badSize || needSize || !last || last.manual || !last.lead) return '';
+  if (!v || badSize || needSize || !last || last.units || !last.lead || !last.lead.every(isFinite)) return '';
   const [y, m, dd] = v.split('-').map(Number), need = new Date(y, m - 1, dd), [a, b] = readyDates(orderLead());
   return need < a ? 'sooner' : need < b ? 'tight' : '';
 }
@@ -636,7 +650,7 @@ function draw(){
   }) || (!last.manual && !isFinite(last.total)));
   if (pricedFile && kind === pricedKind && !badSize && !needSize) {
     if (last.manual) { est.delete(pricedFile); rvw.set(pricedFile, { q: last.q, spec: last.spec[0], why: last.review, units: last.units }); }
-    else { est.set(pricedFile, { sub: last.sub, q: last.q, spec: last.spec[0], lead: last.lead }); rvw.delete(pricedFile); }
+    else { est.set(pricedFile, { sub: last.sub, q: last.q, spec: last.spec[0], lead: last.lead, lines: last.lines.filter(l => !/^Minimum order/.test(l[0])) }); rvw.delete(pricedFile); }   // B135: lines for the email
   }
   if (badSize) {
     $('#estlb').textContent = 'Estimate'; $('#tot').style.fontSize = '';
@@ -710,7 +724,8 @@ function setKind(k, byFile){
 }
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setKind(b.dataset.k));
 qf.addEventListener('input', e => { if (e.target.name === 'qty' || e.target.name === 'mCx') e.target.dataset.t = 1;
-  if (e.target.name === 'qty') $('#cadmsg').textContent = $('#cadmsg').textContent.replace(QNOTE, ''); delete e.target.dataset.d; needSize = false; render(); });
+  if (e.target.name === 'qty') $('#cadmsg').textContent = $('#cadmsg').textContent.replace(QNOTE, ''); delete e.target.dataset.d; needSize = false;
+  if (e.target.name === 'pT' && kind === 'panel') thickNote(); render(); });
 // No past dates in Need by (B33).
 { const t = new Date(); $('#sf').elements.need.min = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; }
 $('#sf').elements.need.addEventListener('change', needNote);
@@ -733,13 +748,14 @@ function summary(){
     ...(kind === 'panel' && pricedFile && qf.elements.pT.dataset.d === qf.elements.pT.value ? [`Thickness: not in ${pricedFile}, so we used ${size(qf.elements.pT).v} mm.`] : []), '',
     ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [last.units ? `No price yet. Please check these sizes: ${last.review.join(' ')}` : `Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
       ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
-      `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not binding)${last.only ? `. ${combo() ? `${comboLine(combo())} One engineer review for all files.${combo().t < P.minOrder ? ` Minimum order is ${usd(P.minOrder)} across all files.` : ''}` :'We\'ll send one price for all your files. The review and minimum apply once.'}` : ''}`,
+      `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not a firm quote)${last.only ? `. ${combo() ? `${comboLine(combo())} One engineer review for all files.${combo().t < P.minOrder ? ` Minimum order is ${usd(P.minOrder)} across all files.` : ''}` :'We\'ll send one price for all your files. The review and minimum apply once.'}` : ''}`,
       combo() ? `All parts ready about ${readyRange(orderLead())} if approved today (${orderLead()[0]}–${orderLead()[1]} working days)`   // B124: one ready line for the order
         : `Lead time: ${last.lead[0]}–${last.lead[1]} working days after approval (about ${readyRange()} if approved today)`]),
     // B56: one line per other CAD file, with what was read from it.
     ...(() => { const o = cadNames().filter(n => n !== pricedFile);
       // B89: a file priced earlier keeps its spec, quantity and estimate.
-      return o.length && cadNames().length > 1 ? ['', ...o.map(n => est.has(n) ? `${n}: ${est.get(n).spec}. Quantity ${est.get(n).q}, estimate ${usd(est.get(n).sub)} (not binding).`
+      // B135: with every priced line (Parts, Setup, Mold, Review), like the file above, so the order total can be checked.
+      return o.length && cadNames().length > 1 ? ['', ...o.map(n => est.has(n) ? [`${n}: ${est.get(n).spec}. Quantity ${est.get(n).q}.`, ...(est.get(n).lines || []).map(l => `${l[0].replace(/^Engineer review$/, 'Engineer review (once per order)')}: ${usd(l[1])}`), `Estimate for ${n}: ${usd(est.get(n).sub)} (not a firm quote).`].join('\n')
         : rvw.has(n) ? `${n}: ${rvw.get(n).spec.replace(/NaN/g, '?')}. Quantity ${rvw.get(n).q}. ${rvw.get(n).units ? `No price yet. Check these sizes: ${rvw.get(n).why.join(' ')}` : `An engineer needs to price this: ${rvw.get(n).why.join('; ')}`}`.replace(/\.?$/, '.') : readFiles.get(n) ? `${n}: ${readFiles.get(n)}. Not priced yet; we'll email a price.` : `${n}: couldn't read it; we'll email a price.`)] : []; })(),
     ...(last.warn.length ? ['', 'Notes:', ...last.warn.map(w => '- ' + w)] : []), '',
     `Name: ${s.name.value}`, `Company: ${s.org.value}`, `Email: ${s.email.value}`, `Need by: ${s.need.value || 'flexible'}${({ sooner: ' (before our lead time, check with shop)', tight: ' (tight, check with shop)' })[needFit()] || ''}`,
