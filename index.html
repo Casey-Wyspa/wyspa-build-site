@@ -356,15 +356,17 @@ function calc(){
   } else if (kind === 'molded') {
     const L = val('mL'), W = val('mW'), H = val('mH') || 0, cx = qf.elements.mCx;
     // B52: until the buyer picks a shape, pick Open or Deep from the sizes (same rule as for files).
-    if (!cx.dataset.t && cx.value !== 'complex' && Math.min(L, W) > 0) cx.value = H / Math.min(L, W) < 0.5 ? 'simple' : 'medium';
+    if (!cx.dataset.t && cx.value !== 'complex' && Math.min(L, W) > 0) cx.value = H / Math.min(L, W) <= 0.5 ? 'simple' : 'medium';   // B90: depth = half the width is Open
     const m = P.plies[val('mMat')], c = P.molded.complexity[cx.value], M = P.molded;
     // Wall thickness in mm -> whole plies of the chosen fabric, rounded up
     const wall = val('mWall') || 1, n = Math.max(1, Math.ceil(wall / m.t - 1e-9));
     const fromFile = fileSurf && fileSurf.L === L && fileSurf.W === W && fileSurf.H === H, a = fromFile ? fileSurf.m2 : (L * W + 2 * H * (L + W)) / 1e6;   // B68: the file's own surface while its sizes are unchanged
     mat = a * n * plyM2(val('mMat'), a * n * q); fabA = a * n * q; fabSave = a * n * m.perM2 - mat;
-    // Thick wet layups cure in stages (carbon about 1,200 gsm of fabric per cure, glass its own cureGsm); each extra cure adds bagging time. Prepreg cures once.
+    // Thick wet layups cure in stages (carbon about 4,000 gsm of fabric per cure, glass its own cureGsm); each extra cure adds bagging time. Prepreg cures once.
     const cures = val('mMat') === 'prepreg' ? 1 : Math.max(1, Math.ceil(n * m.gsm / (m.cureGsm || M.wetGsmPerCure) - 1e-9));
-    hr = M.hrPerPart + M.trimHours + a * (M.hrPerM2 + n * (m.layHrPerM2Ply || M.hrPerM2Ply)) * c.labor + (cures - 1) * (M.hrPerCure + a * M.hrPerM2 * c.labor);
+    // B90: small parts have less edge to trim and less mold to prep and bag, so the fixed hours scale with sqrt(area), with a floor.
+    const sz = M.fixedFullM2 ? Math.max(M.fixedMinScale || 0, Math.min(1, Math.sqrt(a / M.fixedFullM2))) : 1;
+    hr = (M.hrPerPart + M.trimHours) * sz + a * (M.hrPerM2 + n * (m.layHrPerM2Ply || M.hrPerM2Ply)) * c.labor + (cures - 1) * (M.hrPerCure * sz + a * M.hrPerM2 * c.labor);
     kg = a * n * m.t * m.density;
     mat += cons(a * cures, hr);
     if (val('mTool') === 'new') nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) + (c.tool - 1) * a * M.tool.hrPerM2, a * M.tool.matPerM2 * c.tool);  // B42: minimum hours counted once; shape factor scales only the area hours
@@ -491,10 +493,10 @@ function applyFile(g, file, sketch, picked) {
     put('mWall', wall);
     // Closed or solid (blade, foil, mast): the "wall" read from the file is over a quarter of the thinnest side.
     fileSolid = g.wall > g.H / 4;
-    // Shape from the file (B28): an open shell less than half as deep as its shorter side = open/shallow; deeper = medium.
+    // Shape from the file (B28): an open shell at most half as deep as its shorter side = open/shallow (B90: exactly half is Open); deeper = medium.
     // Flanges and inserts can't be read from a mesh, so the buyer picks those. Was depth < 15% of the longest side.
     const span = Math.min(g.L, g.W);
-    put('mCx', g.complex || fileSolid ? 'complex' : span > 0 && g.H / span < 0.5 ? 'simple' : 'medium');
+    put('mCx', g.complex || fileSolid ? 'complex' : span > 0 && g.H / span <= 0.5 ? 'simple' : 'medium');
     // B66: an inch STEP is shown in inches first, like an inch DXF (B57).
     what = `${g.inch ? `${inch(g.L)} × ${inch(g.W)} × ${inch(g.H)} in (${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm)` : `${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm`}${g.wall ? `, about ${wall} mm wall` : ''}`;
   }

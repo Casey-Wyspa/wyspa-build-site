@@ -79,14 +79,15 @@ window.WYSPA_PRICING = {
   molded: {
     materials: ["carbon", "prepreg", "glass", "hybrid"],
     complexity: {
-      simple:  { label: "Open, depth under half the width",   labor: 1.0, tool: 1.0 },
+      simple:  { label: "Open, depth up to half the width",   labor: 1.0, tool: 1.0 },
       medium:  { label: "Deep, or has flanges or inserts",    labor: 1.6, tool: 1.7 },
       complex: { label: "Closed or hollow (engineer quote)",  labor: 2.6, tool: 2.8 },
     },
     setupHours: 3,                         // new-mold orders: ply templates, trim fixture, first-part check
     hrPerPart: 2.0, trimHours: 2.0,        // per part: mold prep, bag and cure; trim, sand and drill
+    fixedFullM2: 0.12, fixedMinScale: 0.4, // B90: under 0.12 m² of surface, the per-part and per-extra-cure hours scale with sqrt(area / 0.12) (edge to trim and bag), never under 0.4x (1.6 h). Full 4 h at 0.12 m² and up (D-spigot 0.12 m², foil-wing skin 0.23 m²). research/pricing/b90-small-molded-2026-10-13.md
     hrPerM2: 1.0, hrPerM2Ply: 1.3,         // layup per m² of surface, plus per ply (carbon, prepreg, carbon+glass: X2; glass uses plies.glass.layHrPerM2Ply)
-    wetGsmPerCure: 1200,                   // carbon and carbon+glass wet layup: at most about 1,200 gsm of dry fabric per cure (3 plies of 400 gsm, a 2025 aircraft repair spec). Glass uses its own cureGsm. Prepreg: one cure
+    wetGsmPerCure: 4000,                   // carbon and carbon+glass wet layup in a mold: about 4,000 gsm of dry fabric per cure (20 plies, ~4.4 mm; same resin mass per cure as glass cureGsm; West System, Gurit, PRO-SET, Scott Bader). Was 1,200 from an on-aircraft joint repair spec (B108). Glass uses its own cureGsm. Prepreg: one cure
     hrPerCure: 1.0,                        // each extra cure: re-bag and cure setup (half of hrPerPart), plus hrPerM2 x surface to sand, peel ply and bag again
     tool: { hrMin: 18, hrPerM2: 30, matPerM2: 250 },  // plug + mold; hrMin counted once, the shape's tool factor scales only the area hours (B42, 2026-10-12)
   },
@@ -104,7 +105,7 @@ window.WYSPA_PRICING = {
     moldedHrPerKg: [3, 12],   // molded labor hours per kg of part outside this goes to engineer review. Big-part aerospace plan: 4.1-6.2 h/kg (wing 6.4-9.6)
     moldedHrPerKgGlass: [1.5, 12],  // glass wet layup runs ~2-3.5 h/kg at the glass layup rate; a timed flat glass part took ~0.6 h/kg (Skramstad 1999). Judgment floor
     moldedHrPerKgMinKg: 2,   // only parts of at least this weight: below it the fixed prep/trim hours dominate (a real 0.5 kg skin took 13.5 h/kg)
-    moldedSmallKg: 0.2, moldedSmallGsm: 2400,   // molded part under 0.2 kg with more than 2,400 gsm of fabric (over 2 wet cures): a shop would press-mold or machine it (2026-10-13)
+    moldedSmallKg: 0.2, moldedSmallGsm: 2400,   // molded part under 0.2 kg with more than 2,400 gsm of fabric (thick for its size): a shop would press-mold or machine it (2026-10-13)
     panelMaxSolidT: 10,       // mm, solid laminate (cure heat, voids, press size)
     minSkin: 0.4,             // mm, cored panel skin (2 plies)
     maxCoreToSkin: 50,        // core thickness / skin thickness (dents, inserts, edge crush)
