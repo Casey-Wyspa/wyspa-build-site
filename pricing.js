@@ -109,8 +109,12 @@ window.WYSPA_PRICING = {
     panelMaxSolidT: 10,       // mm, solid laminate (cure heat, voids, press size)
     minSkin: 0.4,             // mm, cored panel skin (2 plies)
     maxCoreToSkin: 50,        // core thickness / skin thickness (dents, inserts, edge crush)
+    maxLeadDays: 60,          // B116: ready date past 60 working days (high end) -> engineer plans it; longest Drive lead ~65 days (research/pricing/lead-time-2026-10-14.md)
   },
 
   // Lead time in working days by order type (before any shipping)
   leadDays: { panel: [10, 15], rotor: [15, 20], rotorNewMold: [25, 35], molded: [20, 30], moldedNewMold: [35, 50] },
+  // B116 (2026-10-14): extra days for big orders. 8 shop h/day (Drive budget "est shop day $680" = 8 h at $85); base ranges already hold 5 days of work (D-spigot job);
+  // one mold: 1 cure/day molded, 2 press cycles/day rotor (judgment, wet-layup working time + cure). research/pricing/lead-time-2026-10-14.md
+  leadQty: { hrPerDay: 8, daysInBase: 5, cyclesPerDay: { rotor: 2, molded: 1 } },
 };

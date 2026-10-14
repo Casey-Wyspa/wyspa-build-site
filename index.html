@@ -285,7 +285,12 @@ const val = n => { const el = fs(kind).querySelector(`[name="${n}"]`); return el
 SIZES.forEach(n => qf.querySelector(`[name="${n}"]`).insertAdjacentHTML('afterend', '<span class="cv"></span>'));
 // A bare number the buyer typed (not from a file) that is too small to be mm: "Is it in inches? Type 10 in." (B36).
 const typedIn = n => { const el = fs(kind).querySelector(`[name="${n}"]`); return size(el).bare && el.value !== el.dataset.f ? ` Type ${el.value.trim()} in.` : ''; };
-const small = (n, what, min) => { const h = typedIn(n); return h && val(n) < min ? `${what} under ${min} mm. Is it in inches?${h}` : ''; };
+// B119: review reasons that are only a units question are tagged here; if all of them are, the price box says "Check your sizes".
+let unitQ = new Set();
+const UQ = s => (s && unitQ.add(s), s);
+const small = (n, what, min) => { const h = typedIn(n); return h && val(n) < min ? UQ(`${what} under ${min} mm. Is it in inches?${h}`) : ''; };
+// B118: typed with an inch unit, not a bare number (fractions count as inches).
+const inchIn = n => / in$/.test(size(fs(kind).querySelector(`[name="${n}"]`)).typed || '');
 // B114: what a rotor quantity means. Under the rotor price and as one line in every rotor email.
 const ROTOR_NOTE = "Price is per rotor, not per pair. All rotors in this quote spin the same way. Need the other direction? Say so in the notes. It needs its own mold, and we'll price it after an engineer checks your part.";
 // B112: what "Outer layers" means, under the field while it shows no unit conversion.
@@ -296,10 +301,11 @@ const price = (hours, mat) => hours * P.rate + mat * P.materialMult;
 const cadNames = () => [...$('#sf').elements.files.files].map(f => f.name).filter(n => /\.(dxf|stp|step|igs|iges|stl|3dm)$/i.test(n));
 
 function calc(){
+  unitQ = new Set();
   const q = Math.max(1, Math.round(val('qty') || 1)), warn = [], spec = [], review = [], lm = qtyMult(q), X = P.review;
   // Consumables: per part labor hour, never less than the per-m² bag materials (2026-10-13).
   const cons = (m2, h) => Math.max(m2 * P.consumablesPerM2, h * (P.consumablesPerHour || 0));
-  let hr = 0, mat = 0, nre = 0, setup = 0, lead, kg = 0, cut = false;   // kg: finished part weight from the laminate (areal weight x area, plus core)
+  let hr = 0, mat = 0, nre = 0, setup = 0, lead, kg = 0, cut = false, cycles = 0;   // cycles: mold cures per part (B116 ready date)   // kg: finished part weight from the laminate (areal weight x area, plus core)
   // Fabric volume prices by order size (2026-10-13): price factor for A m² of one fabric in the whole order. The cheapest break wins,
   // buying up to it if that costs less, so ordering more never raises the fabric bill. Resin, core and consumables keep list prices.
   const vm = (v, A) => A > 0 && v ? Math.min(1, ...v.map(([t, k]) => Math.max(A, t) * k / A)) : 1;
@@ -332,14 +338,14 @@ function calc(){
     // B36: a bare 48 × 30 × 19 is a block, not a panel; likely inches up to 60.
     const lim = n => val(n) < 25 || T <= Math.min(L, W) / 4 ? 25 : 60;
     review.push(...[small('pL', 'Length', lim('pL')), small('pW', 'Width', lim('pW'))].filter(Boolean));
-    if (T < 0.3) review.push(`Thickness under 0.3 mm. Is it in inches?${typedIn('pT')}`);
+    if (T < 0.3) review.push(UQ(`Thickness under 0.3 mm. Is it in inches?${typedIn('pT')}`));
     const maxT = cored ? X.panelCoreMaxT : X.panelMaxT;
     if (T > maxT) review.push(`Thicker than ${maxT} mm`);
-    if (cored && coreT <= 0) review.push(`Too thin for a foam core. ${typedIn('pT') ? `Is it in inches?${typedIn('pT')}` : 'Check thickness and outer layers.'}`);
+    if (cored && coreT <= 0) review.push(typedIn('pT') ? UQ(`Too thin for a foam core. Is it in inches?${typedIn('pT')}`) : 'Too thin for a foam core. Check thickness and outer layers.');
     else if (cored && coreT < C.core.minT) review.push(`Foam core under ${C.core.minT} mm. Check thickness and outer layers.`);
     if (!cored && T > X.panelMaxSolidT) review.push(`Solid laminate thicker than ${X.panelMaxSolidT} mm. Foam in the middle? Set Foam core to Yes.`);
     // B69: skins take mm or inches like the other sizes; a bare tiny number asks about inches, like Thickness.
-    if (cored && skin < X.minSkin) review.push(`Outer layers under ${X.minSkin} mm${typedIn('pSkin') ? `. Is it in inches?${typedIn('pSkin')}` : ''}`);
+    if (cored && skin < X.minSkin) review.push(typedIn('pSkin') ? UQ(`Outer layers under ${X.minSkin} mm. Is it in inches?${typedIn('pSkin')}`) : `Outer layers under ${X.minSkin} mm`);
     if (cored && coreT > X.maxCoreToSkin * skin) review.push('Thin outer layers on a thick core');
     // B115: no gsm (layup) in a review email; the engineer works it out.
     const rv = review.length > 0;
@@ -348,7 +354,7 @@ function calc(){
     const D = val('rD'), B = val('rB'), m = P.plies[val('rMat')], geo = val('rGeo'), R = P.rotor, bm = R.bladeMult[B];
     const eq = (R.matBase + D * D * R.matPerIn2) * bm / P.plies.carbon.perM2;   // rotor material as m² of carbon ply
     mat = eq * plyM2(val('rMat'), eq * q); fabA = eq * q; fabSave = eq * m.perM2 - mat;
-    hr = (R.hrBase + D * R.hrPerIn) * bm + R.balanceHours;
+    hr = (R.hrBase + D * R.hrPerIn) * bm + R.balanceHours; cycles = 1;
     kg = R.kgPerIn2 * D * D * bm;
     mat += cons(0, hr);
     if (geo === 'new' || geo === 'design') nre = price((R.mold.hrBase + D * R.mold.hrPerIn) * (B > 2 ? 1.2 : 1), R.mold.matBase + D * R.mold.matPerIn);
@@ -356,7 +362,7 @@ function calc(){
     if (geo === 'design') review.push('Rotor design by Wyspa');
     // B62: a bare number over the limit is probably mm; ask instead of reading "560" as 560 in (same idea as B36).
     const rEl = fs('rotor').querySelector('[name=rD]'), mmQ = D > X.rotorMaxD && size(rEl).bare && rEl.value !== rEl.dataset.f;
-    if (D > X.rotorMaxD) review.push(`Diameter over ${X.rotorMaxD} in${mmQ ? `. Is it in mm? Type ${rEl.value.trim()} mm.` : ''}`);
+    if (D > X.rotorMaxD) review.push(mmQ ? UQ(`Diameter over ${X.rotorMaxD} in. Is it in mm? Type ${rEl.value.trim()} mm.`) : `Diameter over ${X.rotorMaxD} in`);
     if (B > X.rotorMaxBlades) review.push(`More than ${X.rotorMaxBlades} blades`);
     spec.push(`Rotor ${mmQ ? `diameter to confirm (typed ${rEl.value.trim()}, no unit)` : `${D} in diameter`}, ${B}-blade, ${m.label}, mold: ${fs('rotor').querySelector('[name=rGeo]').selectedOptions[0].text}`);
   } else if (kind === 'molded') {
@@ -374,7 +380,7 @@ function calc(){
     const sz = M.fixedFullM2 ? Math.max(M.fixedMinScale || 0, Math.min(1, Math.sqrt(a / M.fixedFullM2))) : 1;
     hr = (M.hrPerPart + M.trimHours) * sz + a * (M.hrPerM2 + n * (m.layHrPerM2Ply || M.hrPerM2Ply)) * c.labor + (cures - 1) * (M.hrPerCure * sz + a * M.hrPerM2 * c.labor);
     kg = a * n * m.t * m.density;
-    mat += cons(a * cures, hr);
+    mat += cons(a * cures, hr); cycles = cures;
     if (val('mTool') === 'new') nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) + (c.tool - 1) * a * M.tool.hrPerM2, a * M.tool.matPerM2 * c.tool);  // B42: minimum hours counted once; shape factor scales only the area hours
     if (nre) setup = price(M.setupHours || 0, 0);   // new-mold orders only: ply templates, trim fixture, first-part check (not discounted)
     lead = nre ? P.leadDays.moldedNewMold : P.leadDays.molded;
@@ -391,17 +397,29 @@ function calc(){
       if (HK && kg >= (X.moldedHrPerKgMinKg || 0) && (hk < HK[0] || hk > HK[1])) review.push(hk < HK[0] ? 'Wall is too thick for this size' : 'Wall is too thin for this size');   // few hours per kg = a heavy, thick wall
       // Small, thick parts (e.g. a 60 g bracket with a 3.4 mm wall): a shop would press-mold or machine them, not bag them wet in 3 cures.
       if (X.moldedSmallKg && kg < X.moldedSmallKg && n * m.gsm > X.moldedSmallGsm) review.push('Small, thick molded part');
-      review.push(...[small('mL', 'Length', 25), small('mW', 'Width', 25)].filter(Boolean));
+      const sL = small('mL', 'Length', 25), sW = small('mW', 'Width', 25);
+      review.push(...[sL, sW].filter(Boolean));
+      // B118: Length or Width in inches (typed "in", a fraction, or a bare number we just asked about) and a bare Depth: ask which unit.
+      const hEl = fs('molded').querySelector('[name=mH]'), hv = hEl.value.trim();
+      if ((inchIn('mL') || inchIn('mW') || sL || sW) && size(hEl).bare && hEl.value !== hEl.dataset.f && H > 0 && H <= 60) review.push(UQ(`Depth ${hv}: mm or inches? Type ${hv} mm or ${hv} in.`));   // over 60 can't be inches here (B36 range)
       // B37: only blame the file when the wall came from one.
       const wEl = fs('molded').querySelector('[name=mWall]');
       wallQ = wall < 0.5 && wEl.value === wEl.dataset.f;
-      if (wall < 0.5) review.push(`Wall under 0.5 mm. ${wallQ ? 'Is the file in inches?' : `Is it in inches?${typedIn('mWall')}`}`);
+      if (wall < 0.5) review.push(UQ(`Wall under 0.5 mm. ${wallQ ? 'Is the file in inches?' : `Is it in inches?${typedIn('mWall')}`}`));
     }
     spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${+a.toPrecision(3)} m² ${fromFile ? 'surface, measured from your file' : 'surface, estimated from your dimensions'}), ${wallQ ? 'wall to confirm' : `${wall} mm wall${review.length ? '' : ` (${n} ${n === 1 ? 'ply' : 'plies'})`}`}, ${m.label}, ${c.label}, ${nre ? 'new mold' : 'repeat order, our existing mold'}`);
   } else {
     const txt = n => fs('assembly').querySelector(`[name="${n}"]`).value.trim();
     review.push('Assembly');
     spec.push(`Assembly: ${txt('aDesc') || '(none given)'}`, `Overall size: ${txt('aSize') || '?'} mm`);
+  }
+  // B116: ready date grows with the order. Work days = shop labor at 8 h/day, or mold cures (one mold), whichever is longer; the base range already holds 5 days.
+  // Over maxLeadDays at the high end: no instant date (research/pricing/lead-time-2026-10-14.md).
+  const LQ = P.leadQty;
+  if (LQ && lead) {
+    const d = Math.max(hr * q / LQ.hrPerDay, cycles && LQ.cyclesPerDay[kind] ? q * cycles / LQ.cyclesPerDay[kind] : 0), x = Math.ceil(Math.max(0, d - LQ.daysInBase) - 1e-9);
+    lead = [lead[0] + x, lead[1] + x];
+    if (X.maxLeadDays && lead[1] > X.maxLeadDays) review.push('Order too large for an instant ready date');
   }
   // Part weight: one short line on the page and in the email. Under 0.1 kg in grams.
   const wt = kg > 0 && isFinite(kg) ? `About ${kg < 0.1 ? `${Math.max(1, Math.round(kg * 1000))} g` : `${kg < 1 ? kg.toFixed(2) : kg < 10 ? kg.toFixed(1) : Math.round(kg)} kg`} each${cut ? ' before cutouts' : ''}.` : '';
@@ -411,7 +429,7 @@ function calc(){
     if (wt) spec.push(`Weight: ${wt.toLowerCase().slice(0, -1)}`);
     if (fabSave > 0.005) spec.push(`Fabric at volume prices: about ${Math.round(fabA)} m² for this order`);
   }
-  if (review.length) return { q, manual: true, review, spec, warn: [], lines: [], kg, hr };
+  if (review.length) return { q, manual: true, units: review.every(r => unitQ.has(r)), review, spec, warn: [], lines: [], kg, hr };
   // Never charge more than the next quantity break would (labor discount steps at 10/50/250).
   const nb = P.qtyBreaks.find(b => b.min > q), capped = nb && price(hr * qtyMult(nb.min), mat) * nb.min < price(hr * lm, mat) * q;
   if (capped) warn.push(`Same total as ${nb.min} parts.`);
@@ -594,6 +612,13 @@ function draw(){
     $('#lines').innerHTML = ''; $('#warn').innerHTML = '';
     return;
   }
+  // B119: only units questions: ask them in the headline, no engineer-quote wording.
+  if (last.units) {
+    $('#estlb').textContent = 'Estimate'; $('#tot').textContent = 'Check your sizes'; $('#tot').style.fontSize = 'clamp(30px,4vw,40px)';
+    $('#per').replaceChildren(...last.review.map(r => Object.assign(document.createElement('div'), { textContent: r })));
+    $('#lines').innerHTML = ''; $('#warn').innerHTML = kind === 'rotor' ? `<div>${ROTOR_NOTE}</div>` : '';
+    return;
+  }
   if (last.manual) {
     $('#estlb').textContent = 'Quote'; $('#tot').textContent = 'Engineer quote'; $('#tot').style.fontSize = 'clamp(30px,4vw,40px)';
     $('#per').textContent = kind === 'assembly' ? 'Send it with your files. We reply with a price.' : 'We need to look at this one. Send it and we reply with a price.';
@@ -672,7 +697,7 @@ function summary(){
       .map(([el, r]) => `${el.parentNode.firstChild.textContent.replace(/\s*\(.*$/, '')} ${r.v} ${el.name === 'rD' ? 'in' : 'mm'} (typed ${r.typed})`)),
     ...(unitEl && !unitEl.closest('fieldset').hidden && unitEl.value === unitEl.dataset.f ? [`Size: ${pricedFile} has no units, so we assumed ${unitAs}.`] : []),
     ...(kind === 'panel' && pricedFile && qf.elements.pT.dataset.d === qf.elements.pT.value ? [`Thickness: not in ${pricedFile}, so we used ${size(qf.elements.pT).v} mm.`] : []), '',
-    ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [`Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
+    ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [last.units ? `No price yet. Please check these sizes: ${last.review.join(' ')}` : `Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
       ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
       `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not binding)${last.only ? `. ${combo() ? `${comboLine(combo())} One engineer review for all files.${combo().t < P.minOrder ? ` Minimum order is ${usd(P.minOrder)} across all files.` : ''}` :'We\'ll send one price for all your files. The review and minimum apply once.'}` : ''}`,
       `Lead time: ${last.lead[0]}–${last.lead[1]} working days after approval (about ${readyRange()} if approved today)`]),
