@@ -4,9 +4,9 @@
 // Edit this file only; index.html reads everything from WYSPA_PRICING.
 window.WYSPA_PRICING = {
   currency: "USD",
-  rate: 169,                  // $/hr, shop + engineering labor
+  rate: 169,                  // $/hr, shop + design labor
   materialMult: 2,            // materials and consumables billed at 2x cost
-  reviewHours: 2,             // per order: Wyspa engineering review and approval
+  reviewHours: 2,             // per order: Wyspa part check and approval
   uploadUrl: "https://script.google.com/macros/s/AKfycbxhM3gdUmvr6sD52QXUTkzJY2zbjkdK3MWFhvEw-DMHVpwpJ4J8L_DJ-WB7ErAXgsmRHg/exec",              // Apps Script web app URL for file uploads (upload-script/Code.gs); empty = email only
   minOrder: 1500,             // floor on the order total (set by Casey 2026-10-10)
 
@@ -81,7 +81,7 @@ window.WYSPA_PRICING = {
     complexity: {
       simple:  { label: "Open, depth up to half the width",   labor: 1.0, tool: 1.0 },
       medium:  { label: "Deep, or has flanges or inserts",    labor: 1.6, tool: 1.7 },
-      complex: { label: "Closed or hollow (engineer quote)",  labor: 2.6, tool: 2.8 },
+      complex: { label: "Closed or hollow (custom quote)",  labor: 2.6, tool: 2.8 },
     },
     setupHours: 3,                         // new-mold orders: ply templates, trim fixture, first-part check
     hrPerPart: 2.0, trimHours: 2.0,        // per part: mold prep, bag and cure; trim, sand and drill
@@ -92,6 +92,7 @@ window.WYSPA_PRICING = {
     tool: { hrMin: 18, hrPerM2: 30, matPerM2: 250,   // plug + mold; hrMin counted once, the shape's tool factor scales only the area hours (B42, 2026-10-12)
             matPerM2Prepreg: 2476 },   // prepreg cures hot, so its mold is a heat-proof carbon tooling laminate: Wyspa job cost model, mold material = 2x part material = $2,476 per m² of part
                                        // (cross-check: 16 plies x $137/m²/ply list prepreg = $2,192). Wet, glass and hybrid keep $250 (room-temperature mold vendor quote). 2026-10-14
+    copies: { max: 4, maxM2: 0.12, hrMin: 3, daysRepeat: 5 },   // B138: parts up to 0.12 m² may use up to 4 molds off one plug, only when one mold would put the ready date past review.maxLeadDays (fewest molds that fit; else review as before). Each extra mold max(3 h, area hours) + one mold's material (past job data: 3.4 h per small mold; 3 h per tool piece); repeat orders add 5 days to make the copies. research/pricing/b138-small-molded-capacity-2026-10-14.md
   },
 
   // Anything past these limits gets no instant price; it goes to engineer review instead

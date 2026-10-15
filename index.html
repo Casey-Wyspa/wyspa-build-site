@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Carbon Fiber Parts, Instant Quote | Wyspa Build</title>
-<meta name="description" content="Instant prices for carbon fiber and fiberglass panels, drone rotors and molded parts. Drop a CAD file. No account needed. An engineer checks every part.">
+<meta name="description" content="Instant prices for carbon fiber and fiberglass panels, drone rotors and molded parts. Drop a CAD file. No account needed. A real person checks every part.">
 <link rel="canonical" href="https://build.wyspa.tech/">
 <meta name="theme-color" content="#0d2430">
 <link rel="icon" type="image/png" href="favicon.png">
@@ -12,7 +12,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Wyspa Build">
 <meta property="og:title" content="Composite parts, priced in seconds">
-<meta property="og:description" content="Panels, drone rotors and molded parts. Type the size or drop a CAD file. No account needed. An engineer checks every part.">
+<meta property="og:description" content="Panels, drone rotors and molded parts. Type the size or drop a CAD file. No account needed. A real person checks every part.">
 <meta property="og:url" content="https://build.wyspa.tech/">
 <meta property="og:image" content="https://build.wyspa.tech/og-image.png">
 <meta property="og:image:width" content="1200">
@@ -141,7 +141,7 @@ html,body{margin:0;background:#eef2f3}
     <text x="680" y="98">−45°</text><text x="680" y="136">+45°</text><text x="680" y="188" fill="#1f8487">core</text><text x="680" y="238">90°</text><text x="680" y="276">0°</text>
    </g>
   </svg>
-  <div class="cap"><span class="lb">Every layer checked by an engineer</span></div>
+  <div class="cap"><span class="lb">Every layer checked by a person</span></div>
  </figure>
 </header>
 
@@ -149,7 +149,7 @@ html,body{margin:0;background:#eef2f3}
  <div class="sh"><div class="lb">How it works</div><div><h2>Three steps</h2></div></div>
  <ol class="steps">
   <li><h3>Get a price</h3><p>Type the size or drop a file. You see a price in seconds.</p></li>
-  <li><h3>Send it</h3><p>An engineer checks the layers and replies with a firm quote.</p></li>
+  <li><h3>Send it</h3><p>We check the layers and reply with a firm quote.</p></li>
   <li><h3>Approve it</h3><p>Say yes and pay half up front by card or bank transfer, or send a PO. We build and ship your parts.</p></li>
  </ol>
 </section>
@@ -214,7 +214,7 @@ html,body{margin:0;background:#eef2f3}
    <div class="note" style="margin-top:0" id="per"></div>
    <table id="lines"></table>
    <div class="warn" id="warn"></div>
-   <p class="note">Shipping not included. The firm quote may change once an engineer checks your part.</p>
+   <p class="note">Shipping not included. This price may change once we check your part.</p>
   </aside>
  </div>
 
@@ -239,12 +239,12 @@ html,body{margin:0;background:#eef2f3}
 </section>
 
 <section id="builders">
- <div class="sh"><div class="lb">For shops</div><div><h2>Build parts with us</h2><p>We send you jobs with the engineering done: checked designs, cut patterns and drawings. You set your rates.</p></div></div>
+ <div class="sh"><div class="lb">For shops</div><div><h2>Build parts with us</h2><p>We send you jobs ready to build: checked designs, cut patterns and drawings. You set your rates.</p></div></div>
  <div class="ct" style="margin-top:0"><a class="btn pr" href="mailto:casey@wyspa.tech?subject=Wyspa%20Build%20-%20shop&amp;body=Shop%20name%3A%0ALocation%3A%0AWhat%20you%20build%3A%0ALargest%20part%3A%0ATypical%20lead%20time%3A%0A">Tell us about your shop</a><a class="v" href="mailto:casey@wyspa.tech">casey@wyspa.tech</a><span class="v">(401) 523-4920</span></div>
 </section>
 </div></div>
 
-<div class="wb" style="padding-top:0"><div class="w" style="border-top:1px solid var(--rule);padding-top:16px;font-size:13px;color:var(--muted)">© 2026 Wyspa Technologies LLC · Prices are estimates until an engineer confirms them.</div></div>
+<div class="wb" style="padding-top:0"><div class="w" style="border-top:1px solid var(--rule);padding-top:16px;font-size:13px;color:var(--muted)">© 2026 Wyspa Technologies LLC · Prices are estimates until we confirm them.</div></div>
 
 <script src="pricing.js"></script>
 <script src="autoquote.js" defer></script>
@@ -301,7 +301,8 @@ const small = (n, what, min) => { const h = typedIn(n); return h && val(n) < min
 // B118: typed with an inch unit, not a bare number (fractions count as inches).
 const inchIn = n => !!size(fs(kind).querySelector(`[name="${n}"]`)).imp;   // B128: feet count too
 // B114: what a rotor quantity means. Under the rotor price and as one line in every rotor email.
-const ROTOR_NOTE = "Price is per rotor, not per pair. All rotors in this quote spin the same way. Need the other direction? Say so in the notes. It needs its own mold, and we'll price it after an engineer checks your part.";
+// B142: on a repeat order the other direction may already have a mold, so no new-mold wording there.
+const rotorNote = () => `Price is per rotor, not per pair. All rotors in this quote spin the same way. ${val('rGeo') === 'repeat' ? "Need both directions? Say so in the notes and we'll make sure we have both molds." : "Need the other direction? Say so in the notes. It needs its own mold, which we'll price after we check your part."}`;
 // B112: what "Outer layers" means, under the field while it shows no unit conversion.
 const SKIN_HINT = 'Thickness of each carbon or glass skin on the foam. Set to 1 mm to start. Change it to match your design.';
 const qtyMult = q =>P.qtyBreaks.filter(b => q >= b.min).pop().mult;
@@ -314,7 +315,7 @@ function calc(){
   const q = Math.max(1, Math.round(val('qty') || 1)), warn = [], spec = [], review = [], lm = qtyMult(q), X = P.review;
   // Consumables: per part labor hour, never less than the per-m² bag materials (2026-10-13).
   const cons = (m2, h) => Math.max(m2 * P.consumablesPerM2, h * (P.consumablesPerHour || 0));
-  let hr = 0, mat = 0, nre = 0, setup = 0, lead, kg = 0, cut = false, cycles = 0;   // cycles: mold cures per part (B116 ready date)   // kg: finished part weight from the laminate (areal weight x area, plus core)
+  let hr = 0, mat = 0, nre = 0, setup = 0, lead, kg = 0, cut = false, cycles = 0, molds = 1, copyDays = 0;   // molds, copyDays: B138 extra molds and the days to make them   // cycles: mold cures per part (B116 ready date)   // kg: finished part weight from the laminate (areal weight x area, plus core)
   // Fabric volume prices by order size (2026-10-13): price factor for A m² of one fabric in the whole order. The cheapest break wins,
   // buying up to it if that costs less, so ordering more never raises the fabric bill. Resin, core and consumables keep list prices.
   const vm = (v, A) => A > 0 && v ? Math.min(1, ...v.map(([t, k]) => Math.max(A, t) * k / A)) : 1;
@@ -402,9 +403,21 @@ function calc(){
     hr = (M.hrPerPart + M.trimHours) * sz + a * (M.hrPerM2 + n * (m.layHrPerM2Ply || M.hrPerM2Ply)) * c.labor + (cures - 1) * (M.hrPerCure * sz + a * M.hrPerM2 * c.labor);
     kg = a * n * m.t * m.density;
     mat += cons(a * cures, hr); cycles = cures;
-    if (val('mTool') === 'new') nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) + (c.tool - 1) * a * M.tool.hrPerM2, a * ((val('mMat') === 'prepreg' && M.tool.matPerM2Prepreg) || M.tool.matPerM2) * c.tool);  // B42: minimum hours counted once; shape factor scales only the area hours
-    if (nre) setup = price(M.setupHours || 0, 0);   // new-mold orders only: ply templates, trim fixture, first-part check (not discounted)
-    lead = nre ? P.leadDays.moldedNewMold : P.leadDays.molded;
+    const newT = val('mTool') === 'new', MC = M.copies, LQ0 = P.leadQty, L0 = newT ? P.leadDays.moldedNewMold : P.leadDays.molded;
+    // B138: a small part whose one mold would push the ready date past maxLeadDays gets the fewest extra molds (off the same plug)
+    // that bring it back under; if the most molds still don't, it goes to review as before. Every other order keeps one mold.
+    if (MC && LQ0 && X.maxLeadDays && a <= MC.maxM2) {
+      const kMax = Math.min(MC.max, Math.floor(M.tool.hrMin / (a * M.tool.hrPerM2 * c.tool) + 1e-9));   // all molds within the area the tool minimum covers
+      const labD = hr * q / LQ0.hrPerDay, cureD = q * cures / LQ0.cyclesPerDay.molded, cd = newT ? 0 : MC.daysRepeat;
+      const hi = k => L0[1] + Math.ceil(Math.max(0, Math.max(labD, cureD / k) - LQ0.daysInBase) - 1e-9) + (k > 1 ? cd : 0);   // same as the B116 block below
+      if (hi(1) > X.maxLeadDays) for (let k = 2; k <= kMax; k++) if (hi(k) <= X.maxLeadDays) { molds = k; copyDays = cd; break; }
+    }
+    const tm = a * ((val('mMat') === 'prepreg' && M.tool.matPerM2Prepreg) || M.tool.matPerM2) * c.tool;   // one mold's material
+    const copyHr = Math.max(MC ? MC.hrMin : 0, a * M.tool.hrPerM2 * c.tool);                               // each extra mold
+    if (newT) nre = price(Math.max(M.tool.hrMin, a * M.tool.hrPerM2) + (c.tool - 1) * a * M.tool.hrPerM2 + (molds - 1) * copyHr, tm * molds);  // B42: minimum hours counted once; shape factor scales only the area hours
+    else if (molds > 1) nre = price((molds - 1) * copyHr, tm * (molds - 1));
+    if (newT) setup = price(M.setupHours || 0, 0);   // new-mold orders only: ply templates, trim fixture, first-part check (not discounted)
+    lead = L0;
     let wallQ = false;   // B60: a file wall too thin to be real (likely inches) is written "wall to confirm", not the misread number
     if (fileSolid) review.push('Closed or solid part');
     else {
@@ -436,7 +449,7 @@ function calc(){
   // Over maxLeadDays at the high end: no instant date (research/pricing/lead-time-2026-10-14.md).
   const LQ = P.leadQty;
   if (LQ && lead) {
-    const d = Math.max(hr * q / LQ.hrPerDay, cycles && LQ.cyclesPerDay[kind] ? q * cycles / LQ.cyclesPerDay[kind] : 0), x = Math.ceil(Math.max(0, d - LQ.daysInBase) - 1e-9);
+    const d = Math.max(hr * q / LQ.hrPerDay, cycles && LQ.cyclesPerDay[kind] ? q * cycles / (LQ.cyclesPerDay[kind] * molds) : 0), x = Math.ceil(Math.max(0, d - LQ.daysInBase) - 1e-9) + copyDays;
     lead = [lead[0] + x, lead[1] + x];
     if (X.maxLeadDays && lead[1] > X.maxLeadDays) review.push('Order too large for an instant ready date');
   }
@@ -444,7 +457,7 @@ function calc(){
   const wt = kg > 0 && isFinite(kg) ? `About ${kg < 0.1 ? `${Math.max(1, Math.round(kg * 1000))} g` : `${kg < 1 ? kg.toFixed(2) : kg < 10 ? kg.toFixed(1) : Math.round(kg)} kg`} each${cut ? ' before cutouts' : ''}.` : '';
   // B115: a part sent to review gets no weight, ply or fabric numbers (they came out as "38 kg each" for an unconfirmed size).
   // B115 also for reasons found after the spec line was written (order too large for an instant ready date): drop the gsm and plies.
-  if (review.length) { spec[0] = spec[0].replace(/ \(about \d+ gsm(?: each)?\)| \(\d+ pl(?:y|ies)\)/g, ''); if (kind !== 'assembly') spec.push('Weight and layup: an engineer will work these out with your price.'); }
+  if (review.length) { spec[0] = spec[0].replace(/ \(about \d+ gsm(?: each)?\)| \(\d+ pl(?:y|ies)\)/g, ''); if (kind !== 'assembly') spec.push("Weight and layup: we'll work these out with your price."); }
   else {
     if (wt) spec.push(`Weight: ${wt.toLowerCase().slice(0, -1)}`);
     if (fabSave > 0.005) spec.push(`Fabric at volume prices: about ${Math.round(fabA)} m² for this order`);
@@ -462,8 +475,8 @@ function calc(){
     // B29: show the volume discount on screen, not just in the emailed spec.
     [`Parts: ${q} × ${usd2(unitP)}${(capped ? qtyMult(nb.min) : lm) < 1 ? ` (${Math.round((1 - (capped ? qtyMult(nb.min) : lm)) * 100)}% off labor only)` : ''}`, unitP * q],
     setup && ['Setup', setup],
-    nre && ['Mold (one time)', nre],
-    [only ? 'Engineer review (once per order)' : 'Engineer review', price(P.reviewHours, 0)],
+    nre && [kind === 'molded' && val('mTool') !== 'new' ? `Extra mold${molds > 2 ? 's' : ''} (one time)` : 'Mold (one time)', nre],
+    [only ? 'Part check (once per order)' : 'Part check', price(P.reviewHours, 0)],
   ].filter(Boolean).map(l => [l[0], Math.round(l[1])]);   // B31: whole dollars per line, so the lines add up to the total
   let total = lines.reduce((s, l) => s + l[1], 0);
   const sub = total;   // B89: before the minimum, kept per file for the "All your files so far" line
@@ -477,7 +490,8 @@ function calc(){
     lines.push([`Minimum order (${usd(P.minOrder)})`, P.minOrder - total]); total = P.minOrder;
   }
   // One-off mold tip whenever the new mold is more than half the order (was: only at qty 1 or 2). First note, as before.
-  if (kind === 'molded' && nre && Math.round(nre) > total / 2) warn.unshift('The mold is most of this price. Ask about a printed or machined one-off mold.');
+  if (kind === 'molded' && val('mTool') === 'new' && nre && Math.round(nre) > total / 2) warn.unshift('The mold is most of this price. Ask about a printed or machined one-off mold.');
+  if (molds > 1) warn.unshift(`Includes ${molds - 1} extra ${molds > 2 ? 'molds' : 'mold'} so your parts are ready sooner.`);   // B138
   // Same discount as the Parts line, including the "same total as 50 parts" cap (B41).
   const em = capped ? qtyMult(nb.min) : lm;
   if (em < 1) spec.push(`Volume discount on labor: ${Math.round((1 - em) * 100)}%`);
@@ -501,7 +515,7 @@ const combo = () => { const fl = cadNames().filter(n => est.has(n)); if (!last.o
   return { t: fl.reduce((s, n) => s + est.get(n).sub, 0) - (fl.length - 1) * Math.round(price(P.reviewHours, 0)), txt: fl.map(n => `${n} × ${est.get(n).q}`).join(', '),
     lead: [0, 1].map(i => Math.max(...fl.map(n => est.get(n).lead[i]))) }; };   // B100: the order is ready when its slowest part is
 // B140: the one review, and a test for its line, so per-file subtotals can leave it out when it's charged once for the order.
-const rvwUsd = () => Math.round(price(P.reviewHours, 0)), noRvw = l => !/^Engineer review/.test(l[0]);
+const rvwUsd = () => Math.round(price(P.reviewHours, 0)), noRvw = l => !/^Part check/.test(l[0]);
 // B99: each tab remembers the last file priced on it, and each file keeps what was read from it (mesh surface, cut length,
 // solid, unit guess, file message). Clicking a tab brings that file back with its own fields and quantity, not the last file's.
 const tabFile = {}, fileCtx = new Map();
@@ -573,7 +587,7 @@ function applyFile(g, file, sketch, picked) {
   pricedKind = kind; tabFile[kind] = { f: file.name, c: ctx }; fileCtx.set(file.name, ctx);
   render();
   $('#cadmsg').textContent = fileSolid
-    ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part, like a blade, foil, mast or tube. These need a two-piece mold, so an engineer prices them. Send it and we'll reply with a price.`
+    ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part (blade, foil, mast or tube). It needs a two-piece mold, so we price it by hand. Send it and we'll reply with a price.`
     : `From ${file.name}: ${what}${kind === 'rotor' ? '' : ` (${g.units})`}.${moved ? ' This part isn\'t flat, so we priced it as a molded part.' : ''}${newPart ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
   ctx.msg = $('#cadmsg').textContent.replace(QNOTE, '');
 }
@@ -663,14 +677,14 @@ function draw(){
   if (last.units) {
     $('#estlb').textContent = 'Estimate'; $('#tot').textContent = 'Check your sizes'; $('#tot').style.fontSize = 'clamp(30px,4vw,40px)';
     $('#per').replaceChildren(...last.review.map(r => Object.assign(document.createElement('div'), { textContent: r })));
-    $('#lines').innerHTML = ''; $('#warn').innerHTML = kind === 'rotor' ? `<div>${ROTOR_NOTE}</div>` : '';
+    $('#lines').innerHTML = ''; $('#warn').innerHTML = kind === 'rotor' ? `<div>${rotorNote()}</div>` : '';
     return;
   }
   if (last.manual) {
-    $('#estlb').textContent = 'Quote'; $('#tot').textContent = 'Engineer quote'; $('#tot').style.fontSize = 'clamp(30px,4vw,40px)';
+    $('#estlb').textContent = 'Quote'; $('#tot').textContent = 'Custom quote'; $('#tot').style.fontSize = 'clamp(30px,4vw,40px)';
     $('#per').textContent = kind === 'assembly' ? 'Send it with your files. We reply with a price.' : 'We need to look at this one. Send it and we reply with a price.';
     $('#lines').innerHTML = '';
-    $('#warn').innerHTML = kind === 'assembly' ? '' : `<div>Why: ${last.review.join(' · ')}</div>${kind === 'rotor' ? `\n<div>${ROTOR_NOTE}</div>` : ''}`;
+    $('#warn').innerHTML = kind === 'assembly' ? '' : `<div>Why: ${last.review.join(' · ')}</div>${kind === 'rotor' ? `\n<div>${rotorNote()}</div>` : ''}`;
     return;
   }
   // B48: several CAD files, one priced. Say so in the label, not just a note.
@@ -687,7 +701,7 @@ function draw(){
   $('#tot').textContent = usd(C ? Math.max(C.t, P.minOrder) : last.total);   // the minimum is per order, so that's what 2+ files below it cost
   // B126: the per-file subtotals plus one review add up to the big number.
   const fl = C && cadNames().filter(n => est.has(n));
-  $('#per').textContent = C ? `${fl.map(n => `${n} × ${est.get(n).q}: ${usd(est.get(n).sub - R)}`).join(' + ')} + ${usd(R)} engineer review (once per order)${C.t < P.minOrder ? ` + ${usd(P.minOrder - C.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(C.lead)} if you approve today`
+  $('#per').textContent = C ? `${fl.map(n => `${n} × ${est.get(n).q}: ${usd(est.get(n).sub - R)}`).join(' + ')} + ${usd(R)} part check (once per order)${C.t < P.minOrder ? ` + ${usd(P.minOrder - C.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(C.lead)} if you approve today`
     : `${each} each, all in · Ready about ${readyRange()} if you approve today${last.only ? '. We\'ll send one price for all your files. The review and minimum apply once.' : ''}`;
   $('#lines').innerHTML = (C ? last.lines.filter(noRvw) : last.lines).map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${C ? `Subtotal for ${last.only}` : last.only ? `Total for ${last.only}` : 'Total'}</td><td class="n">${usd(last.total - R)}</td></tr>`;
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
@@ -699,7 +713,7 @@ function draw(){
   // stock catalog items; carbon + glass sheet isn't, so no line for it.
   const fit2 = noFile && !holes && val('pCore') !== 'core' && val('pMat') !== 'hybrid' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
     : kind === 'rotor' && val('rGeo') === 'new' ? ["A stock-size prop usually costs less from a catalog. We're best for custom rotors."] : [];
-  $('#warn').innerHTML = [...(kind === 'rotor' ? [ROTOR_NOTE] : []), ...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...(last.only && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}${typed ? ' More than one part? Send each one. We\'ll price them together as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+  $('#warn').innerHTML = [...(kind === 'rotor' ? [rotorNote()] : []), ...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...(last.only && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? ` That covers ${last.fit} of this part, so you can add more at no extra cost.` : ''}${typed ? ' More than one part? Send each one. We\'ll price them together as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 function setKind(k, byFile){
@@ -744,13 +758,13 @@ function summary(){
   const s = $('#sf').elements, C = !badSize && !last.manual && !needSize && combo(), R = C ? rvwUsd() : 0;
   return [
     `Wyspa Build ${last.manual ? 'review' : 'quote'} request ${qid}`, '',
-    ...last.spec.map(l => l.replace(/NaN/g, '?')), `Quantity: ${last.q}`, ...(kind === 'rotor' ? [ROTOR_NOTE] : []),   // blank sizes (B49 sketch) read "?", not NaN
+    ...last.spec.map(l => l.replace(/NaN/g, '?')), `Quantity: ${last.q}`, ...(kind === 'rotor' ? [rotorNote()] : []),   // blank sizes (B49 sketch) read "?", not NaN
     // Converted sizes, e.g. "Thickness 3.2 mm (typed 1/8 in)", or "(typed 1/8, read as inches)" when no unit was typed (B131).
     ...(kind === 'assembly' ? [] : SIZES.map(n => fs(kind).querySelector(`[name="${n}"]`)).filter(el => el && !el.closest('[hidden]')).map(el => [el, size(el)]).filter(([, r]) => r.typed)
       .map(([el, r]) => `${el.parentNode.firstChild.textContent.replace(/\s*\(.*$/, '')} ${r.v} ${el.name === 'rD' ? 'in' : 'mm'} (${r.said})`)),
     ...(unitEl && !unitEl.closest('fieldset').hidden && unitEl.value === unitEl.dataset.f ? [`Size: ${pricedFile} has no units, so we assumed ${unitAs}.`] : []),
     ...(kind === 'panel' && pricedFile && qf.elements.pT.dataset.d === qf.elements.pT.value ? [`Thickness: not in ${pricedFile}, so we used ${size(qf.elements.pT).v} mm.`] : []), '',
-    ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [last.units ? `No price yet. Please check these sizes: ${last.review.join(' ')}` : `Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
+    ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [last.units ? `No price yet. Please check these sizes: ${last.review.join(' ')}` : `We'll price this by hand: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
       ...(C ? last.lines.filter(noRvw) : last.lines).map(l => `${l[0]}: ${usd(l[1])}`),
       ...(C ? [`Subtotal for ${last.only}: ${usd(last.total - R)}`] : [
         `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not a firm quote)${last.only ? '. We\'ll send one price for all your files. The review and minimum apply once.' : ''}`,
@@ -759,10 +773,10 @@ function summary(){
     ...(() => { const o = cadNames().filter(n => n !== pricedFile);
       // B89: a file priced earlier keeps its spec, quantity and estimate.
       // B135: with every priced line (Parts, Setup, Mold, Review), like the file above, so the order total can be checked.
-      return o.length && cadNames().length > 1 ? ['', ...o.map(n => est.has(n) ? [`${n}: ${est.get(n).spec}. Quantity ${est.get(n).q}.`, ...(est.get(n).lines || []).filter(l => !C || noRvw(l)).map(l => `${l[0].replace(/^Engineer review$/, 'Engineer review (once per order)')}: ${usd(l[1])}`), C ? `Subtotal for ${n}: ${usd(est.get(n).sub - R)}` : `Estimate for ${n}: ${usd(est.get(n).sub)} (not a firm quote).`].join('\n')
-        : rvw.has(n) ? `${n}: ${rvw.get(n).spec.replace(/NaN/g, '?')}. Quantity ${rvw.get(n).q}. ${rvw.get(n).units ? `No price yet. Check these sizes: ${rvw.get(n).why.join(' ')}` : `An engineer needs to price this: ${rvw.get(n).why.join('; ')}`}`.replace(/\.?$/, '.') : readFiles.get(n) ? `${n}: ${readFiles.get(n)}. Not priced yet; we'll email a price.` : `${n}: couldn't read it; we'll email a price.`)] : []; })(),
+      return o.length && cadNames().length > 1 ? ['', ...o.map(n => est.has(n) ? [`${n}: ${est.get(n).spec}. Quantity ${est.get(n).q}.`, ...(est.get(n).lines || []).filter(l => !C || noRvw(l)).map(l => `${l[0].replace(/^Part check$/, 'Part check (once per order)')}: ${usd(l[1])}`), C ? `Subtotal for ${n}: ${usd(est.get(n).sub - R)}` : `Estimate for ${n}: ${usd(est.get(n).sub)} (not a firm quote).`].join('\n')
+        : rvw.has(n) ? `${n}: ${rvw.get(n).spec.replace(/NaN/g, '?')}. Quantity ${rvw.get(n).q}. ${rvw.get(n).units ? `No price yet. Check these sizes: ${rvw.get(n).why.join(' ')}` : `We'll price this by hand: ${rvw.get(n).why.join('; ')}`}`.replace(/\.?$/, '.') : readFiles.get(n) ? `${n}: ${readFiles.get(n)}. Not priced yet; we'll email a price.` : `${n}: couldn't read it; we'll email a price.`)] : []; })(),
     // B140: the order section. File subtotals + review (+ minimum top-up) = the order estimate.
-    ...(C ? ['', `Order: ${C.txt}`, `Engineer review (once per order): ${usd(R)}`, ...(C.t < P.minOrder ? [`To reach ${usd(P.minOrder)} minimum: ${usd(P.minOrder - C.t)}`] : []),
+    ...(C ? ['', `Order: ${C.txt}`, `Part check (once per order): ${usd(R)}`, ...(C.t < P.minOrder ? [`To reach ${usd(P.minOrder)} minimum: ${usd(P.minOrder - C.t)}`] : []),
       `Order estimate: ${usd(Math.max(C.t, P.minOrder))} (not a firm quote)`,
       `All parts ready about ${readyRange(C.lead)} if approved today (${C.lead[0]}–${C.lead[1]} working days)`] : []),   // B124: one ready line for the order
     ...(last.warn.length ? ['', 'Notes:', ...last.warn.map(w => '- ' + w)] : []), '',
