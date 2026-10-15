@@ -151,7 +151,7 @@ html,body{margin:0;background:#eef2f3}
  <ol class="steps">
   <li><h3>Get a price</h3><p>Type the size or drop a file. You see a price in seconds.</p></li>
   <li><h3>Send it</h3><p>We check the layers and reply with a firm quote.</p></li>
-  <li><h3>Approve it</h3><p>Say yes and pay half up front by card or bank transfer, or send a PO. We make and ship your parts.</p></li>
+  <li><h3>Approve it</h3><p>Pay by card, or use Send to pay by bank transfer or PO. We make and ship your parts.</p></li>
  </ol>
 </section>
 
@@ -235,7 +235,7 @@ html,body{margin:0;background:#eef2f3}
   </form>
   <p class="note" id="needmsg" hidden></p>
   <div class="cta"><button class="btn pr" type="button" id="go">Send</button><button class="btn" type="button" id="pay" hidden>Order and pay by card</button></div>
-  <p class="note" id="payterms" hidden>You pay the price shown, in full, by card. We check every order before we start. If the price changes, you choose: pay the difference or get a full refund.<br>Cancel for a full refund any time before we start. Paying by bank transfer or PO? Use Send instead.</p>
+  <p class="note" id="payterms" hidden>You pay the price shown, in full, by card. Shipping is extra. We email the cost before we ship.<br>We check every order before we start. If the price changes, you choose: pay the difference or get a full refund. You can cancel for a full refund any time before we start. Paying by bank transfer or PO? Use Send.</p>
   <p class="note" id="msg"></p>
  </div>
 </section>
@@ -258,7 +258,7 @@ const UPLOAD_URL = P.uploadUrl || '';
 // Card checkout (Square link made by the same Apps Script). Off unless pricing.js checkoutEnabled, or ?checkout=1 for testing.
 const Q = new URLSearchParams(location.search), CHECKOUT = !!UPLOAD_URL && (P.checkoutEnabled === true || Q.get('checkout') === '1');
 // Back from Square: ?paid=WB-... (Square may add its own parameters after it).
-{ const id = Q.get('paid'); if (id && /^WB-[A-Z0-9-]{4,20}$/i.test(id)) document.getElementById('paid').textContent = `Payment received for ${id}. We check your order and email you within 1 working day.`; }
+{ const id = Q.get('paid'); if (id && /^WB-[A-Z0-9-]{4,20}$/i.test(id)) document.getElementById('paid').textContent = `Payment received for ${id}. We'll check your order and email you within 1 working day.`; }
 const usd = n => '$' + Math.round(n).toLocaleString('en-US');
 const usd2 = n => '$' + n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const fill = (sel, obj) => { sel.innerHTML = Object.entries(obj).map(([k,v]) => `<option value="${k}">${v.label}</option>`).join(''); };
@@ -880,7 +880,7 @@ const send = async pay => {
       $('#msg').textContent = `Request sent. Your reference is ${qid}. Taking you to the card payment…`;
       return void (location.href = r.checkoutUrl);
     }
-    $('#msg').textContent = pay ? `Request sent. Your reference is ${qid}. We'll email you a pay link.` : `Got it. Your reference is ${qid}. We'll email you a firm quote. Nothing is charged until you approve it.`;
+    $('#msg').textContent = pay ? `Request sent. Your reference is ${qid}. We'll email you a pay link within 1 working day.` : `Got it. Your reference is ${qid}. We'll email you a firm quote. Nothing is charged until you approve it.`;
   } catch (e) {
     $('#msg').textContent = 'Upload failed. Opening an email instead; attach your files there.';
     setTimeout(mailto, 1500);
