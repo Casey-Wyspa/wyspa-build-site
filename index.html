@@ -115,6 +115,7 @@ html,body{margin:0;background:#eef2f3}
 <div class="wb top" style="padding-bottom:0"><div class="w" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;border-bottom:1px solid var(--rule);padding-bottom:16px"><a href="https://www.wyspa.tech" style="display:flex;align-items:center;gap:10px;font:800 18px/1 var(--d);font-stretch:125%;letter-spacing:.04em;color:var(--ink);text-decoration:none"><img src="wyspa-mark.png" alt="Wyspa Tech logo" width="38" height="28" style="height:28px;width:auto;display:block"><span>WYSPA<span style="color:var(--signal)">/</span>BUILD</span></a><a href="https://www.wyspa.tech" style="font:500 13px var(--m);color:var(--muted);text-decoration:none">← wyspa.tech</a></div></div>
 
 <div class="wb"><div class="w">
+<p class="warn" id="paid" style="margin:0 0 24px"></p>
 <header class="hero">
  <div>
   <h1>Composite parts, <em>priced</em> in seconds.</h1>
@@ -150,7 +151,7 @@ html,body{margin:0;background:#eef2f3}
  <ol class="steps">
   <li><h3>Get a price</h3><p>Type the size or drop a file. You see a price in seconds.</p></li>
   <li><h3>Send it</h3><p>We check the layers and reply with a firm quote.</p></li>
-  <li><h3>Approve it</h3><p>Say yes and pay half up front by card or bank transfer, or send a PO. We build and ship your parts.</p></li>
+  <li><h3>Approve it</h3><p>Say yes and pay half up front by card or bank transfer, or send a PO. We make and ship your parts.</p></li>
  </ol>
 </section>
 
@@ -233,7 +234,8 @@ html,body{margin:0;background:#eef2f3}
    </fieldset>
   </form>
   <p class="note" id="needmsg" hidden></p>
-  <div class="cta"><button class="btn pr" type="button" id="go">Send</button></div>
+  <div class="cta"><button class="btn pr" type="button" id="go">Send</button><button class="btn" type="button" id="pay" hidden>Order and pay by card</button></div>
+  <p class="note" id="payterms" hidden>You pay the price shown, in full, by card. We check every order before we start. If the price changes, you choose: pay the difference or get a full refund.<br>Cancel for a full refund any time before we start. Paying by bank transfer or PO? Use Send instead.</p>
   <p class="note" id="msg"></p>
  </div>
 </section>
@@ -253,6 +255,10 @@ html,body{margin:0;background:#eef2f3}
 const P = window.WYSPA_PRICING, $ = s => document.querySelector(s), qf = $('#qf');
 // Google Apps Script web app that saves uploads to Drive and emails Casey (upload-script/Code.gs). Empty = email-only fallback.
 const UPLOAD_URL = P.uploadUrl || '';
+// Card checkout (Square link made by the same Apps Script). Off unless pricing.js checkoutEnabled, or ?checkout=1 for testing.
+const Q = new URLSearchParams(location.search), CHECKOUT = !!UPLOAD_URL && (P.checkoutEnabled === true || Q.get('checkout') === '1');
+// Back from Square: ?paid=WB-... (Square may add its own parameters after it).
+{ const id = Q.get('paid'); if (id && /^WB-[A-Z0-9-]{4,20}$/i.test(id)) document.getElementById('paid').textContent = `Payment received for ${id}. We check your order and email you within 1 working day.`; }
 const usd = n => '$' + Math.round(n).toLocaleString('en-US');
 const usd2 = n => '$' + n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const fill = (sel, obj) => { sel.innerHTML = Object.entries(obj).map(([k,v]) => `<option value="${k}">${v.label}</option>`).join(''); };
@@ -684,7 +690,7 @@ function needNote(){
   el.hidden = !f;
 }
 // Phones: a bar pinned to the bottom shows the total while the form is on screen and the price box isn't.
-function render(){ draw(); needNote(); $('#barlb').textContent = $('#estlb').textContent; $('#bartot').textContent = $('#tot').textContent; }
+function render(){ draw(); needNote(); $('#pay').hidden = $('#payterms').hidden = !payUsd(); $('#barlb').textContent = $('#estlb').textContent; $('#bartot').textContent = $('#tot').textContent; }
 const seen = new Map(), io = new IntersectionObserver(es => {
   es.forEach(e => seen.set(e.target, e.isIntersecting));
   $('#bar').classList.toggle('on', !!seen.get(qf) && !seen.get($('#est')));
@@ -758,6 +764,15 @@ function draw(){
   const fit2 = noFile && !holes && val('pCore') !== 'core' && val('pMat') !== 'hybrid' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
     : kind === 'rotor' && val('rGeo') === 'new' ? ["A stock-size prop usually costs less from a catalog. We're best for custom rotors."] : [];
   $('#warn').innerHTML = [...(kind === 'rotor' ? [rotorNote()] : []), ...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...(last.only && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? (last.sets > 1 ? ` That covers up to ${last.fit} sets, so you can add more at no extra cost.` : ` That covers ${last.fit} of this part, so you can add more at no extra cost.`) : ''}${typed ? ' More than one part? Send each one. We\'ll price them together as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+}
+
+// The card button shows only for one firm instant number covering the whole request: no custom quote, no "Check your sizes",
+// no file still waiting for a price, and the same dollars as the big number on screen. $1,500 to $50,000, as the intake script checks.
+function payUsd(){
+  if (!CHECKOUT || !last || badSize || needSize || last.manual || last.units || kind === 'assembly') return 0;
+  const C = combo(), fl = cadNames();
+  const t = C ? (fl.every(n => est.has(n)) ? Math.max(C.t, P.minOrder) : 0) : (last.only || fl.some(n => n !== pricedFile) ? 0 : last.total), r = Math.round(t);
+  return isFinite(r) && r >= P.minOrder && r <= 50000 && usd(r) === $('#tot').textContent ? r : 0;
 }
 
 function setKind(k, byFile){
@@ -843,8 +858,9 @@ const mailto = () => {
   $('#msg').textContent = `Your email app should open now. Attach your files there. If nothing opens, email casey@wyspa.tech and quote ${qid}.`;
 };
 const b64 = f => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(f); });
-$('#go').onclick = async () => {
-  const sf = $('#sf'), go = $('#go');
+// pay: the order total in dollars for card checkout (0 = a plain Send). Both buttons send the same request.
+const send = async pay => {
+  const sf = $('#sf'), go = $('#go'), pb = $('#pay');
   if (!sf.reportValidity()) return;
   if (kind === 'assembly' && !fs('assembly').querySelector('[name=aDesc]').value.trim()) { $('#msg').textContent = 'Tell us what it is first.'; fs('assembly').querySelector('[name=aDesc]').focus(); return; }
   if (!UPLOAD_URL) return mailto();
@@ -853,18 +869,25 @@ $('#go').onclick = async () => {
   if (bad) return void ($('#filemsg').textContent = noSend(bad.name));
   if (files.length > 10) return void ($('#msg').textContent = 'Up to 10 files, please. Zip them if you have more.');
   if (files.reduce((t, f) => t + f.size, 0) > 25e6) return void ($('#msg').textContent = 'Files are over 25 MB. Zip them, or send without them and we will send you an upload link.');
-  go.disabled = true; $('#msg').textContent = files.length ? `Uploading ${files.length} file${files.length > 1 ? 's' : ''}…` : 'Sending…';
+  go.disabled = pb.disabled = true; $('#msg').textContent = files.length ? `Uploading ${files.length} file${files.length > 1 ? 's' : ''}…` : 'Sending…';
   try {
     const body = JSON.stringify({ qid, email: sf.elements.email.value, website: sf.elements.website.value, summary: summary(),
-      files: await Promise.all(files.map(async f => ({ name: f.name, type: f.type, data: await b64(f) }))) });
+      files: await Promise.all(files.map(async f => ({ name: f.name, type: f.type, data: await b64(f) }))), ...(pay ? { checkout: true, amount: pay * 100 } : {}) });
     const r = await (await fetch(UPLOAD_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body })).json();
+    if (!r.ok && pay && r.useSend) return void ($('#msg').textContent = r.error);   // amount refused: nothing saved, Send still works
     if (!r.ok) throw new Error(r.error || 'upload failed');
-    $('#msg').textContent = `Got it. Your reference is ${qid}. We'll email you a firm quote. Nothing is charged until you approve it.`;
+    if (pay && /^https:\/\/([a-z0-9-]+\.)*(square\.link|squareup\.com|square\.site)\//i.test(r.checkoutUrl || '')) {
+      $('#msg').textContent = `Request sent. Your reference is ${qid}. Taking you to the card payment…`;
+      return void (location.href = r.checkoutUrl);
+    }
+    $('#msg').textContent = pay ? `Request sent. Your reference is ${qid}. We'll email you a pay link.` : `Got it. Your reference is ${qid}. We'll email you a firm quote. Nothing is charged until you approve it.`;
   } catch (e) {
     $('#msg').textContent = 'Upload failed. Opening an email instead; attach your files there.';
     setTimeout(mailto, 1500);
-  } finally { go.disabled = false; }
+  } finally { go.disabled = pb.disabled = false; }
 };
+$('#go').onclick = () => send(0);
+$('#pay').onclick = () => { const p = payUsd(); if (p) send(p); };
 setKind(kind);
 })();
 </script>

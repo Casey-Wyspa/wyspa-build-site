@@ -8,6 +8,7 @@ window.WYSPA_PRICING = {
   materialMult: 2,            // materials and consumables billed at 2x cost
   reviewHours: 2,             // per order: Wyspa part check and approval
   uploadUrl: "https://script.google.com/macros/s/AKfycbxhM3gdUmvr6sD52QXUTkzJY2zbjkdK3MWFhvEw-DMHVpwpJ4J8L_DJ-WB7ErAXgsmRHg/exec",              // Apps Script web app URL for file uploads (upload-script/Code.gs); empty = email only
+  checkoutEnabled: false,     // "Order and pay by card" button (Square link made by upload-script/Code.gs). Keep false until that script is redeployed; ?checkout=1 shows it for testing
   minOrder: 1500,             // floor on the order total (set by Casey 2026-10-10)
 
   // Learning curve: multiplier on LABOR hours only (materials don't get cheaper)
