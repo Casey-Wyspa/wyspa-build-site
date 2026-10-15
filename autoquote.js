@@ -270,8 +270,47 @@
     return dims[2] < 0.04 * dims[1] ? { kind: 'panel', L: dims[0], W: dims[1], T: dims[2] || 0, units } : { kind: 'molded', L: dims[0], W: dims[1], H: dims[2], units };
   }
 
+  // B183: a few triangles wound the wrong way cancel their share of the signed volume, so the wall read 0.4 mm for 1.2.
+  // Walk the mesh across edges shared by exactly two triangles; a neighbour that runs the shared edge the same way is
+  // flipped. Each connected piece keeps the winding most of its area already had, so a well-made file is unchanged.
+  function orient(t) {
+    let m = 0;
+    for (let i = 0; i < t.length; i++) if (isFinite(t[i])) m = Math.max(m, Math.abs(t[i]));
+    const q = (m || 1) * 1e-6, key = i => `${Math.round(t[i] / q)},${Math.round(t[i + 1] / q)},${Math.round(t[i + 2] / q)}`;
+    const n = Math.floor(t.length / 9), K = [], E = new Map();
+    for (let f = 0; f < n; f++) {
+      const k = [key(9 * f), key(9 * f + 3), key(9 * f + 6)]; K.push(k);
+      if (k[0] === k[1] || k[1] === k[2] || k[0] === k[2]) continue;   // degenerate: no neighbours
+      for (let j = 0; j < 3; j++) { const a = k[j], b = k[(j + 1) % 3], e = a < b ? a + '|' + b : b + '|' + a, l = E.get(e);
+        if (l) l.push([f, a < b]); else E.set(e, [[f, a < b]]); }
+    }
+    const flip = new Int8Array(n).fill(-1), ar = f => { const i = 9 * f, u = [t[i + 3] - t[i], t[i + 4] - t[i + 1], t[i + 5] - t[i + 2]], v = [t[i + 6] - t[i], t[i + 7] - t[i + 1], t[i + 8] - t[i + 2]];
+      return Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]) || 0; };
+    let any = false;
+    for (let s = 0; s < n; s++) {
+      if (flip[s] >= 0) continue;
+      flip[s] = 0; const comp = [s], st = [s]; let fa = 0, ta = 0;
+      while (st.length) {
+        const f = st.pop(), k = K[f];
+        for (let j = 0; j < 3; j++) { const a = k[j], b = k[(j + 1) % 3], l = E.get(a < b ? a + '|' + b : b + '|' + a);
+          if (!l || l.length !== 2) continue;   // open or non-manifold edge: don't guess across it
+          const [g, gd] = l[0][0] === f ? l[1] : l[0], fd = l[0][0] === f ? l[0][1] : l[1][1];
+          if (g === f || flip[g] >= 0) continue;
+          flip[g] = gd === fd ? 1 - flip[f] : flip[f]; comp.push(g); st.push(g); }
+      }
+      for (const f of comp) { const w = ar(f); ta += w; if (flip[f]) fa += w; }
+      const inv = fa > ta / 2;
+      for (const f of comp) { if (inv) flip[f] = 1 - flip[f]; if (flip[f]) any = true; }
+    }
+    if (!any) return t;
+    const r = Float32Array.from(t);
+    for (let f = 0; f < n; f++) if (flip[f]) for (let j = 0; j < 3; j++) { r[9 * f + 3 + j] = t[9 * f + 6 + j]; r[9 * f + 6 + j] = t[9 * f + 3 + j]; }
+    return r;
+  }
+
   function fromMesh(t, U = 'assumed mm') {
     if (t.length < 9) throw new Error('empty mesh');
+    t = orient(t);
     const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
     let area = 0, vol = 0; const S = [0, 0, 0];   // S: sum of the triangles' area vectors, zero for a closed surface
     for (let i = 0; i + 8 < t.length; i += 9) {

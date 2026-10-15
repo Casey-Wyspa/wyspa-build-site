@@ -488,9 +488,12 @@ function calc(){
       // B37: only blame the file when the wall came from one.
       const wEl = fs('molded').querySelector('[name=mWall]');
       wallQ = wall < 0.5 && wEl.value === wEl.dataset.f;
-      if (wall < 0.5) review.push(UQ(`Wall under 0.5 mm. ${wallQ ? 'Is the file in inches?' : `Is it in inches?${typedIn('mWall')}`}`));
+      // B183: a file wall that can't be real; ask about inches only when the file has no units and is small enough to be inches (under 60, as autoquote.js).
+      if (wall < 0.5) review.push(UQ(!wallQ ? `Wall under 0.5 mm. Is it in inches?${typedIn('mWall')}` : fileSurf && fileSurf.nu && Math.max(...fileSurf.f) < 60 ? 'Wall under 0.5 mm. Is the file in inches?' : "We couldn't measure the wall in your file. Please type the thickness."));
     }
-    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${+a.toPrecision(3)} m² ${fromFile || fIn ? 'surface, measured from your file' : fSc ? 'surface, from your file scaled to your size' : 'surface, estimated from your dimensions'}), ${wallQ ? 'wall to confirm' : `${wall} mm wall${review.length ? '' : ` (${n} ${n === 1 ? 'ply' : 'plies'})`}`}, ${m.label}, ${c.label}, ${val('mTool') === 'new' ? 'new mold' : 'repeat order, our existing mold'}`);   // B129: from the Mold choice, not the mold price (blank sizes made it say "existing mold")
+    const bw = +(n * m.t).toFixed(2);   // B185: the wall we build (whole plies), same as the weight uses
+    thk = `, ${bw} mm wall.`;
+    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${+a.toPrecision(3)} m² ${fromFile || fIn ? 'surface, measured from your file' : fSc ? 'surface, from your file scaled to your size' : 'surface, estimated from your dimensions'}), ${wallQ ? 'wall to confirm' : review.length ? `${wall} mm wall` : `${bw} mm wall (${n} ${n === 1 ? 'ply' : 'plies'})`}, ${m.label}, ${c.label}, ${val('mTool') === 'new' ? 'new mold' : 'repeat order, our existing mold'}`);   // B129: from the Mold choice, not the mold price (blank sizes made it say "existing mold")
   } else {
     const txt = n => fs('assembly').querySelector(`[name="${n}"]`).value.trim();
     review.push('Assembly');
@@ -510,7 +513,7 @@ function calc(){
   // B115 also for reasons found after the spec line was written (order too large for an instant ready date): drop the gsm and plies.
   if (review.length) { spec[0] = spec[0].replace(/ \(about \d+ gsm(?: each)?\)| \(\d+ pl(?:y|ies)\)/g, ''); if (kind !== 'assembly') spec.push("Weight and layup: we'll work these out with your price."); }
   else {
-    if (wt) spec.push(thk ? `Weight (calculated): ${wt.slice(12, -1)}` : `Weight: ${wt[0].toLowerCase()}${wt.slice(1, -1)}`);   // 12 = 'Calculated: '.length
+    if (wt) spec.push(thk ? `Weight (calculated): ${wt.slice(12, -1).replace(/, [\d.]+ mm wall$/, '')}` : `Weight: ${wt[0].toLowerCase()}${wt.slice(1, -1)}`);   // 12 = 'Calculated: '.length
     if (fabSave > 0.005) spec.push(`Fabric at volume prices: about ${Math.round(fabA)} m² for this order`);
   }
   // B130: any open units question comes first ("Check your sizes"); the other reasons may only come from the misread size.
@@ -642,7 +645,8 @@ function applyFile(g, file, sketch, picked) {
     setKind('molded', true);
     // Keep the buyer's Mold choice: a repeat customer who uploads a file still has our mold (B35).
     put('mL', r(g.L)); put('mW', r(g.W)); put('mH', r(g.H));
-    const wall = Math.max(0.2, Math.ceil((g.wall || 1) * 10 - 1e-9) / 10);
+    // B189: a wall under 0.2 is shown to 0.01, not floored to 0.2 (an inch file's 0.077 showed as 0.2, read as 0.2 in, then "became" 2 mm).
+    const gw = g.wall || 1, wall = gw < 0.2 ? Math.max(0.01, Math.ceil(gw * 100 - 1e-9) / 100) : Math.ceil(gw * 10 - 1e-9) / 10;
     put('mWall', wall);
     // Closed or solid (blade, foil, mast): the "wall" read from the file is over a quarter of the thinnest side.
     fileSolid = g.wall > g.H / 4;
@@ -656,7 +660,7 @@ function applyFile(g, file, sketch, picked) {
     if (fileSurf && fileSurf.nu && !fileSolid) {
       const n2 = v => +v.toFixed(2);
       wallIn = g.wall ? Math.ceil(g.wall * 254 - 1e-9) / 10 : '';
-      inHead = `From ${file.name}, in inches to match your sizes: ${n2(g.L)} × ${n2(g.W)} × ${n2(g.H)} in (${r(g.L * 25.4)} × ${r(g.W * 25.4)} × ${r(g.H * 25.4)} mm)${wallIn ? `, about ${wallIn} mm wall` : ''}.`;
+      inHead = `From ${file.name}, in inches to match your sizes: ${n2(g.L)} × ${n2(g.W)} × ${n2(g.H)} in (${r(g.L * 25.4)} × ${r(g.W * 25.4)} × ${r(g.H * 25.4)} mm)${wallIn ? `, about ${wallIn} mm wall (${wall} in)` : ''}.`;
     }
   }
   // B172: a file dropped again gets back its own last fields (thickness, material, quantity, finish), not the ones another file left on screen.
