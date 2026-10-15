@@ -368,7 +368,11 @@ function calc(){
     const maxT = cored ? X.panelCoreMaxT : X.panelMaxT;
     if (T > maxT) review.push(`Thicker than ${maxT} mm`);
     if (cored && coreT <= 0) review.push(typedIn('pT') ? UQ(`Too thin for a foam core. Is it in inches?${typedIn('pT')}`) : 'Too thin for a foam core. Check thickness and outer layers.');
-    else if (cored && coreT < C.core.minT) review.push(`Foam core under ${C.core.minT} mm. Check thickness and outer layers.`);
+    else if (cored && coreT < C.core.minT) {
+      // c36: name the foam left over and suggest the thickest outer layers that leave enough foam and still price (price logic unchanged).
+      const s2 = [0.75, 0.5, 0.4].find(s => s < skin && s >= X.minSkin && T - 2 * s >= C.core.minT && T - 2 * s <= X.maxCoreToSkin * s);
+      review.push(s2 ? `With ${+skin.toFixed(2)} mm outer layers the foam is only ${+coreT.toFixed(1)} mm. We need at least ${C.core.minT} mm. Try ${s2} mm outer layers.` : `Foam core under ${C.core.minT} mm. Check thickness and outer layers.`);
+    }
     if (!cored && T > X.panelMaxSolidT) review.push(`Solid laminate thicker than ${X.panelMaxSolidT} mm. Foam in the middle? Set Foam core to Yes.`);
     // B69: skins take mm or inches like the other sizes; a bare tiny number asks about inches, like Thickness.
     if (cored && skin < X.minSkin) review.push(typedIn('pSkin') ? UQ(`Outer layers under ${X.minSkin} mm. Is it in inches?${typedIn('pSkin')}`) : `Outer layers under ${X.minSkin} mm`);
@@ -614,7 +618,7 @@ function applyFile(g, file, sketch, picked) {
   render();
   $('#cadmsg').textContent = fileSolid
     ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part (blade, foil, mast or tube). It needs a two-piece mold, so we price it by hand. Send it and we'll reply with a price.`
-    : `From ${file.name}: ${what}${kind === 'rotor' ? '' : ` (${g.units})`}.${moved ? (last.manual ? ' This part isn\'t flat, so it\'s a molded part.' : ' This part isn\'t flat, so we priced it as a molded part.') : ''}${g.parts && kind === 'panel' ? ` We found ${g.parts.length} parts in this file. We'll price them as one set. Quantity is how many sets you want.` : ''}${newPart && kind !== 'assembly' ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
+    : `From ${file.name}: ${what}${kind === 'rotor' ? '' : ` (${g.units})`}.${moved ? (last.manual ? ' This part isn\'t flat, so it\'s a molded part.' : ' This part isn\'t flat, so we priced it as a molded part.') : ''}${g.parts && kind === 'panel' ? ` We found ${g.parts.length} parts in this file. We'll price them as one set. Quantity is how many sets you want. Length and Width show the whole layout${g.inch ? ` (${inch(g.L)} × ${inch(g.W)} in)` : ''}. Leave them as they are.` : ''}${newPart && kind !== 'assembly' ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
   ctx.msg = $('#cadmsg').textContent.replace(QNOTE, '');
 }
 // B58: a thickness the buyer typed is echoed as typed ("your 1/8 in"), not as if the site chose it.

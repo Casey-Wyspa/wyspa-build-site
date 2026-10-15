@@ -19,7 +19,7 @@ window.WYSPA_PRICING = {
   ],
 
   // Raw material cost per m² per ply (fabric + resin), cured ply thickness t in mm, fabric gsm per mm of cured laminate.
-  // 2026-10-10: Fibre Glast list prices + epoxy at $39.81/kg x1.5 waste; t from Wyspa laminate engine
+  // 2026-10-10: Fibre Glast list prices + epoxy at $39.81/kg (2026-10-15: resin bought = fabric weight, was cured resin x1.5); t from Wyspa laminate engine
   // (Vf 0.50 carbon, 0.45 glass, 0.55 prepreg). Sources: build_work/research/material-costs.md
   // 2026-10-13: cutting scrap x1.2 -> x1.3 (Wyspa's own cost model); prepreg from ACP list (Fibre Glast was the high outlier)
   // density: cured laminate g/cm³, for part weight (laminate engine: carbon fiber 1.80, E-glass 2.54, epoxy 1.08, prepreg resin 1.10 g/cm³ at the Vf above;

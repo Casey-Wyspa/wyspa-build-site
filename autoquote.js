@@ -165,15 +165,20 @@
     }
     // B146: two or more closed loops that sit inside no other closed loop are separate parts nested on one sheet, priced as
     // a set (each part's holes stay holes). Only when every other shape is inside one of them; a drawing frame never gets here.
-    let set = null;
-    if (part.bb === bb) {
-      const cl = shapes.filter(s => s.closed), top = cl.filter(s => !cl.some(o => inside(s, o)));
-      if (top.length > 1 && shapes.every(s => top.includes(s) || top.some(o => inside(s, o)))) set = top;
-    }
-    const [x0, y0, x1, y1] = part.bb, holes = set ? shapes.filter(s => s.closed).length - set.length : inner.filter(s => s.closed).length - (part.bb === bb ? 1 : 0);
     // B122: round holes (circles, or closed loops as wide as tall with a circle's perimeter) vs other cutouts, for the
     // words only; the price uses the total. When the outline is in the list, the largest closed loop is it.
     const isRound = s => { const w = s.bb[2] - s.bb[0], h = s.bb[3] - s.bb[1]; return s.round || (w > 0 && h > 0 && Math.abs(w / h - 1) < 0.03 && Math.abs(s.len / (Math.PI * (w + h) / 2) - 1) < 0.02); };
+    let set = null;
+    if (part.bb === bb) {
+      // B162: nesting depth, even/odd. Loops at depth 0, 2, 4 are parts (a lid nested in another part's cutout); depth 1, 3 are
+      // holes or cutouts of the part around them. A round loop centred in a round hole (a counterbore drawn as 2 circles) stays a hole.
+      const cl = shapes.filter(s => s.closed), outer = s => cl.filter(o => inside(s, o)), mid = s => [(s.bb[0] + s.bb[2]) / 2, (s.bb[1] + s.bb[3]) / 2];
+      const ring = (s, o) => isRound(s) && isRound(o) && Math.hypot(mid(s)[0] - mid(o)[0], mid(s)[1] - mid(o)[1]) <= tol + 0.02 * (o.bb[2] - o.bb[0]);
+      const top = cl.filter(s => { const os = outer(s); if (os.length % 2) return false; if (!os.length) return true;
+        const hole = os.reduce((a, o) => area(o) < area(a) ? o : a); return !ring(s, hole); });
+      if (top.length > 1 && shapes.every(s => top.includes(s) || top.some(o => inside(s, o)))) set = top;
+    }
+    const [x0, y0, x1, y1] = part.bb, holes = set ? shapes.filter(s => s.closed).length - set.length : inner.filter(s => s.closed).length - (part.bb === bb ? 1 : 0);
     const loops = set ? shapes.filter(s => s.closed && !set.includes(s)) : inner.filter(s => s.closed);
     if (!set && part.bb === bb && loops.length) loops.splice(loops.indexOf(loops.reduce((a, s) => area(s) > area(a) ? s : a)), 1);
     // B146: each part's size in mm, long side first, largest part first.
