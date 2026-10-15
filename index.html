@@ -539,12 +539,24 @@ const est = new Map();
 // B127: the same for a file sent to review (no estimate), so its quantity, sizes and reason stay in the email after a tab switch.
 const rvw = new Map();
 // All attached files with an estimate: one engineer review for the whole order (B67), so the extra review lines are taken off.
-const combo = () => { const fl = cadNames().filter(n => est.has(n)); if (!last.only || fl.length < 2 || !fl.includes(pricedFile)) return null;
-  return { t: fl.reduce((s, n) => s + est.get(n).sub, 0) - (fl.length - 1) * Math.round(price(P.reviewHours, 0)), txt: fl.map(n => `${n} × ${est.get(n).q}`).join(', '),
-    lead: [0, 1].map(i => Math.max(...fl.map(n => est.get(n).lead[i]))),   // B100: the order is ready when its slowest part is
-    slow: (L => L.some(v => v < Math.max(...L)) ? fl[L.indexOf(Math.max(...L))] : '')(fl.map(n => est.get(n).lead[1])) }; };   // B148: that part, if the others are sooner
+// B171: on a tab with no file of its own (pricedFile ''), the order is the priced files plus the typed part, but the typed part
+// only counts once the buyer has typed or changed a field on that tab (touched). An untouched tab (ghost) adds nothing.
+const touched = {}, TYPED = 'Typed part', fileVals = new Map();   // fileVals (B172): each file's last fields, for a re-drop
+const GHOST_MSG = 'Type a part\'s sizes here to add it. Your files stay in your order.', JOINED = 'Your typed part is in your order with your files.';
+const filesPriced = () => cadNames().some(n => est.has(n)), ghost = () => !pricedFile && !!last && filesPriced() && !touched[kind];
+const combo = () => { const fl = cadNames().filter(n => est.has(n)); let it;
+  if (pricedFile) { if (badSize || needSize || last.manual || !last.only || fl.length < 2 || !fl.includes(pricedFile)) return null; it = fl.map(n => [n, est.get(n)]); }
+  else {   // B171/B168: a typed part joins the files' order like a file does (one part check, one total); a ghost tab lists the files alone
+    if (!last || !fl.length) return null;
+    const tp = !ghost() && !badSize && !needSize && !last.manual ? [[TYPED, { sub: last.sub, q: last.q, lead: last.lead }]] : [];
+    it = [...tp, ...fl.map(n => [n, est.get(n)])];
+    if (it.length < 2 && !ghost()) return null;
+  }
+  return { it, typed: !pricedFile && it.some(x => x[0] === TYPED), t: it.reduce((s, x) => s + x[1].sub, 0) - (it.length - 1) * Math.round(price(P.reviewHours, 0)), txt: it.map(([n, e]) => `${n} × ${e.q}`).join(', '),
+    lead: [0, 1].map(i => Math.max(...it.map(x => x[1].lead[i]))),   // B100: the order is ready when its slowest part is
+    slow: (L => L.some(v => v < Math.max(...L)) ? (n => n === TYPED ? 'The typed part' : n)(it[L.indexOf(Math.max(...L))][0]) : '')(it.map(x => x[1].lead[1])) }; };   // B148: that part, if the others are sooner
 // B140: the one review, and a test for its line, so per-file subtotals can leave it out when it's charged once for the order.
-const rvwUsd = () => Math.round(price(P.reviewHours, 0)), noRvw = l => !/^Part check/.test(l[0]);
+const rvwUsd = () => Math.round(price(P.reviewHours, 0)), noRvw = l => !/^Part check/.test(l[0]), noMin = l => noRvw(l) && !/^Minimum order/.test(l[0]);   // B171: a typed part's minimum is the order's
 // B99: each tab remembers the last file priced on it, and each file keeps what was read from it (mesh surface, cut length,
 // solid, unit guess, file message). Clicking a tab brings that file back with its own fields and quantity, not the last file's.
 const tabFile = {}, fileCtx = new Map();
@@ -567,6 +579,7 @@ function applyFile(g, file, sketch, picked) {
   if (!g) return render();
   // B89: a new part keeps the quantity on screen (a default would be just as much a guess), and the file message says what it is.
   const newPart = [...fileCtx.keys()].some(n => n !== file.name && cadNames().includes(n));
+  const fv = fileVals.get(file.name);   // B172: read before setKind below re-renders with this file's name
   pricedFile = file.name;
   fileSurf = g.kind === 'molded' && g.m2 > 0 ? { L: Math.round(g.L), W: Math.round(g.W), H: Math.round(g.H), m2: g.m2, f: [g.L, g.W, g.H], nu: !g.inch && /^(assumed mm|read as mm)/.test(g.units) } : null;   // B68: the file's real surface (B145: f, nu for an inch file read as mm)
   // data-f marks a value that came from the file, so the typed-in-inches checks (B36) skip it.
@@ -615,21 +628,27 @@ function applyFile(g, file, sketch, picked) {
       inHead = `From ${file.name}, in inches to match your sizes: ${n2(g.L)} × ${n2(g.W)} × ${n2(g.H)} in (${r(g.L * 25.4)} × ${r(g.W * 25.4)} × ${r(g.H * 25.4)} mm)${wallIn ? `, about ${wallIn} mm wall` : ''}.`;
     }
   }
+  // B172: a file dropped again gets back its own last fields (thickness, material, quantity, finish), not the ones another file left on screen.
+  const again = !!fv && fv.k === kind;
+  if (again) fv.v.forEach(([n, v, d]) => { const el = fs(kind).querySelector(`[name="${n}"]`); if (!el) return;
+    el.value = v; Object.keys(el.dataset).forEach(x => delete el.dataset[x]); Object.assign(el.dataset, d); });
   // B44/B55: carry a guessed unit (mm or inches) into the email while the size from the file is unchanged.
   unitEl = /^(assumed|read as)/.test(g.units) && (kind === 'panel' || kind === 'molded') ? qf.querySelector(`[name="${kind === 'panel' ? 'pL' : 'mL'}"]`) : null;
   unitAs = /^assumed inches/.test(g.units) ? 'inches' : 'mm';   // "read as mm; if it's in inches, ..." is mm
   // B45: a 2D file has no thickness, so say which thickness we used (B55: data-d keeps it for the email until the buyer types one).
   const noT = kind === 'panel' && !(g.T > 0.2);
   const t = qf.elements.pT;
-  if (noT && t.value === t.defaultValue) t.dataset.d = t.value; else delete t.dataset.d;
+  // B172: a thickness another file put there (data-f) wasn't typed either, so it's "set to", never "you typed".
+  if (noT && (t.value === t.defaultValue || (again ? t.dataset.d === t.value : t.value === t.dataset.f))) t.dataset.d = t.value; else delete t.dataset.d;
   const tMsg = thickMsg();
   const ctx = { fileSurf, fileGeo, fileSolid, unitEl, unitAs, msg: '', g, head: `From ${file.name}: ${what} (${g.units}).`, inHead, wallIn, wall0: kind === 'molded' ? qf.elements.mWall.value : '' };
   pricedKind = kind; tabFile[kind] = { f: file.name, c: ctx }; fileCtx.set(file.name, ctx);
   render();
   $('#cadmsg').textContent = fileSolid
     ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part (blade, foil, mast or tube). It needs a two-piece mold, so we price it by hand. Send it and we'll reply with a price.`
-    : `From ${file.name}: ${what}${kind === 'rotor' ? '' : ` (${g.units})`}.${moved ? (last.manual ? ' This part isn\'t flat, so it\'s a molded part.' : ' This part isn\'t flat, so we priced it as a molded part.') : ''}${toFlat ? (last.manual ? ' This part is flat, so it\'s a flat panel.' : ' This part is flat, so we priced it as a flat panel.') : ''}${g.parts && kind === 'panel' ? ` We found ${g.parts.length} parts in this file. We'll price them as one set. Quantity is how many sets you want. Length and Width show the whole layout${g.inch ? ` (${inch(g.L)} × ${inch(g.W)} in)` : ''}. Leave them as they are.` : ''}${newPart && kind !== 'assembly' ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
+    : `From ${file.name}: ${what}${kind === 'rotor' ? '' : ` (${g.units})`}.${moved ? (last.manual ? ' This part isn\'t flat, so it\'s a molded part.' : ' This part isn\'t flat, so we priced it as a molded part.') : ''}${toFlat ? (last.manual ? ' This part is flat, so it\'s a flat panel.' : ' This part is flat, so we priced it as a flat panel.') : ''}${g.parts && kind === 'panel' ? ` We found ${g.parts.length} parts in this file. We'll price them as one set. Quantity is how many sets you want. Length and Width show the whole layout${g.inch ? ` (${inch(g.L)} × ${inch(g.W)} in)` : ''}. Leave them as they are.` : ''}${newPart && !again && kind !== 'assembly' ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
   ctx.msg = $('#cadmsg').textContent.replace(QNOTE, '');
+  if (again && kind === 'molded') inchNote();   // B172: restored inch sizes read the file in inches again (B147)
 }
 // B58: a thickness the buyer typed is echoed as typed ("your 1/8 in"), not as if the site chose it.
 function thickMsg(){ const t = qf.elements.pT, tv = size(t).v;
@@ -677,12 +696,13 @@ const readyRange = L => { const [a, b] = readyDates(L); return `${shortDate(a)}�
 // B124: with 2+ priced files, check the whole order's ready date (its slowest part), the one the headline shows.
 // B136: a part sent to engineer review (not a units question) still has our usual lead time as its earliest date,
 // so the check uses it with the other priced files' dates.
-const orderLead = () => combo()?.lead || (last.manual ? [0, 1].map(i => Math.max(last.lead[i], ...cadNames().filter(n => n !== pricedFile && est.has(n)).map(n => est.get(n).lead[i]))) : last.lead);
+const orderLead = () => (ghost() || !last.manual) && combo()?.lead || (last.manual ? [0, 1].map(i => Math.max(last.lead[i], ...cadNames().filter(n => n !== pricedFile && est.has(n)).map(n => est.get(n).lead[i]))) : last.lead);
 function needFit(){
   const v = $('#sf').elements.need.value;
-  if (!v || badSize || needSize || !last || last.units || !last.lead || !last.lead.every(isFinite)) return '';
+  const G = ghost();   // B171: an untouched typed tab: the files' order date, whatever the tab's defaults say
+  if (!v || !last || !G && (badSize || needSize || last.units || !last.lead || !last.lead.every(isFinite))) return '';
   const [y, m, dd] = v.split('-').map(Number), need = new Date(y, m - 1, dd), [a, b] = readyDates(orderLead());
-  return need < a ? 'sooner' : need < b ? 'tight' : last.manual && !combo() ? '' : 'ok';   // B161: 'ok' = the date fits an instant price (custom quotes say nothing)
+  return need < a ? 'sooner' : need < b ? 'tight' : last.manual && !G ? '' : 'ok';   // B161: 'ok' = the date fits an instant price (custom quotes say nothing)
 }
 function needNote(){
   const f = needFit(), el = $('#needmsg');
@@ -714,6 +734,18 @@ function draw(){
     // B151: a file on the Assembly tab is listed in the email with its own size, not the assembly's description.
     if (last.manual) { est.delete(pricedFile); if (kind === 'assembly') rvw.delete(pricedFile); else rvw.set(pricedFile, { q: last.q, spec: last.spec[0], why: last.review, units: last.units }); }
     else { est.set(pricedFile, { sub: last.sub, q: last.q, sets: last.sets, spec: last.spec[0], lead: last.lead, lines: last.lines.filter(l => !/^Minimum order/.test(l[0])) }); rvw.delete(pricedFile); }   // B135: lines for the email
+    fileVals.set(pricedFile, { k: kind, v: [...fs(kind).querySelectorAll('[name]')].map(el => [el.name, el.value, { ...el.dataset }]) });   // B172
+  }
+  // B171: an untouched typed tab while files are priced: the price box shows the files' order, not the tab's default part.
+  const G = ghost() && combo();
+  if (G) {
+    const R = rvwUsd(), lo = G.t < P.minOrder;
+    $('#estlb').textContent = G.it.length > 1 ? 'Estimate for all your files' : 'Estimate'; $('#tot').style.fontSize = '';
+    $('#tot').textContent = usd(Math.max(G.t, P.minOrder));
+    $('#per').textContent = `${G.it.map(([n, e]) => `${n} × ${e.q}: ${usd(e.sub - R)}`).join(' + ')} + ${usd(R)} part check (once per order)${lo ? ` + ${usd(P.minOrder - G.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(G.lead)} if you approve today${G.slow ? `. ${G.slow} takes the longest, so it sets this date.` : ''}`;
+    $('#lines').innerHTML = [...G.it.map(([n, e]) => [`Subtotal for ${n}`, e.sub - R]), ['Part check (once per order)', R], ...(lo ? [[`Minimum order (${usd(P.minOrder)})`, P.minOrder - G.t]] : [])].map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Total</td><td class="n">${usd(Math.max(G.t, P.minOrder))}</td></tr>`;
+    $('#warn').innerHTML = '';
+    return;
   }
   if (badSize) {
     $('#estlb').textContent = 'Estimate'; $('#tot').style.fontSize = '';
@@ -747,13 +779,12 @@ function draw(){
   // B100: with 2+ priced files the big number is the order total, ready when its slowest part is; this file's price is the small line.
   // B140: with 2+ priced files each file's subtotal leaves out the engineer review; it's added once for the order (same as the email).
   const C = combo(), R = C ? rvwUsd() : 0, each = usd((last.total - R) / last.q);
-  if (C) $('#estlb').textContent = 'Estimate for all your files';
+  if (C) $('#estlb').textContent = C.typed ? 'Estimate for your whole order' : 'Estimate for all your files';
   $('#tot').textContent = usd(C ? Math.max(C.t, P.minOrder) : last.total);   // the minimum is per order, so that's what 2+ files below it cost
   // B126: the per-file subtotals plus one review add up to the big number.
-  const fl = C && cadNames().filter(n => est.has(n));
-  $('#per').textContent = C ? `${fl.map(n => `${n} × ${est.get(n).q}: ${usd(est.get(n).sub - R)}`).join(' + ')} + ${usd(R)} part check (once per order)${C.t < P.minOrder ? ` + ${usd(P.minOrder - C.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(C.lead)} if you approve today${C.slow ? `. ${C.slow} takes the longest, so it sets this date.` : ''}`
+  $('#per').textContent = C ? `${C.it.map(([n, e]) => `${n} × ${e.q}: ${usd(e.sub - R)}`).join(' + ')} + ${usd(R)} part check (once per order)${C.t < P.minOrder ? ` + ${usd(P.minOrder - C.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(C.lead)} if you approve today${C.slow ? `. ${C.slow} takes the longest, so it sets this date.` : ''}`
     : `${each} ${last.sets > 1 ? 'per set' : 'each'}, all in · Ready about ${readyRange()} if you approve today${last.only ? '. We\'ll send one price for all your files. The review and minimum apply once.' : ''}`;
-  $('#lines').innerHTML = (C ? last.lines.filter(noRvw) : last.lines).map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${C ? `Subtotal for ${last.only}` : last.only ? `Total for ${last.only}` : 'Total'}</td><td class="n">${usd(last.total - R)}</td></tr>`;
+  $('#lines').innerHTML = (C ? last.lines.filter(noMin) : last.lines).map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${C ? (last.only ? `Subtotal for ${last.only}` : 'Typed part subtotal') : last.only ? `Total for ${last.only}` : 'Total'}</td><td class="n">${usd((C ? last.sub : last.total) - R)}</td></tr>`;
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
   const typed = !$('#sf').elements.files.files.length, noFile = kind === 'panel' && typed, holes = parseFloat(qf.elements.pHoles.value) > 0;
@@ -763,7 +794,7 @@ function draw(){
   // stock catalog items; carbon + glass sheet isn't, so no line for it.
   const fit2 = noFile && !holes && val('pCore') !== 'core' && val('pMat') !== 'hybrid' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
     : kind === 'rotor' && val('rGeo') === 'new' ? ["A stock-size prop usually costs less from a catalog. We're best for custom rotors."] : [];
-  $('#warn').innerHTML = [...(kind === 'rotor' ? [rotorNote()] : []), ...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...(last.only && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? (last.sets > 1 ? ` That covers up to ${last.fit} sets, so you can add more at no extra cost.` : ` That covers ${last.fit} of this part, so you can add more at no extra cost.`) : ''}${typed ? ' More than one part? Send each one. We\'ll price them together as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+  $('#warn').innerHTML = [...(kind === 'rotor' ? [rotorNote()] : []), ...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...((last.only || C) && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin && !C ? [`Every order is at least ${usd(P.minOrder)}.${last.fit > last.q ? (last.sets > 1 ? ` That covers up to ${last.fit} sets, so you can add more at no extra cost.` : ` That covers ${last.fit} of this part, so you can add more at no extra cost.`) : ''}${typed ? ' More than one part? Send each one. We\'ll price them together as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 // The card button shows only for one firm instant number covering the whole request: no custom quote, no "Check your sizes",
@@ -789,8 +820,10 @@ function setKind(k, byFile){
     // B168: the file stays in the request (the email lists it with its own price); say so instead of leaving its message up.
     const away = pricedFile, tab = $(`.tabs [data-k=${pricedKind}]`)?.textContent;
     pricedFile = ''; pricedKind = '';
-    if ((est.has(away) || rvw.has(away)) && tab) $('#cadmsg').textContent = `This price is only for the part you typed. ${away} is still in your request, on the ${tab} tab.`;
+    if (!filesPriced() && (est.has(away) || rvw.has(away)) && tab) $('#cadmsg').textContent = `This price is only for the part you typed. ${away} is still in your request, on the ${tab} tab.`;
   }
+  // B171: a typed tab while files are priced: an untouched one isn't in the order yet; a touched one is in it with the files.
+  if (!byFile && !back && !pricedFile && filesPriced()) $('#cadmsg').textContent = touched[k] ? JOINED : GHOST_MSG;
   // B137: each tab keeps its own quantity on a tab click (typed plates x100 and a cover x10 no longer overwrite each other).
   // Only an uploaded file that moves to another tab carries the quantity on screen with it (B89).
   const q0 = kind && fs(kind) && fs(kind).querySelector('[name=qty]'), q1 = fs(k).querySelector('[name=qty]');
@@ -804,6 +837,10 @@ function setKind(k, byFile){
   render();
 }
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setKind(b.dataset.k));
+// B171: typing or changing any field on a tab makes its typed part real; while files are priced it joins their order.
+const touch = e => { const k = e.target.closest && e.target.closest('fieldset')?.dataset.k; if (!k || touched[k]) return; touched[k] = 1;
+  if (k === kind && !pricedFile && filesPriced()) { $('#cadmsg').textContent = JOINED; render(); } };
+qf.addEventListener('input', touch); qf.addEventListener('change', touch);
 qf.addEventListener('input', e => { if (e.target.name === 'qty' || e.target.name === 'mCx') e.target.dataset.t = 1;
   if (e.target.name === 'qty') $('#cadmsg').textContent = $('#cadmsg').textContent.replace(QNOTE, ''); delete e.target.dataset.d; needSize = false;
   if (e.target.name === 'pT' && kind === 'panel') thickNote(); if (/^m[LWH]$/.test(e.target.name)) inchNote(); render(); });
@@ -819,10 +856,11 @@ qf.elements.pCore.addEventListener('change', e => {
 
 function summary(){
   // B140: with 2+ priced files (C), file blocks leave the review out; it's listed once in the order section at the end.
-  const s = $('#sf').elements, C = !badSize && !last.manual && !needSize && combo(), R = C ? rvwUsd() : 0;
+  // B171: an untouched typed tab (G) sends only the files and their order; a typed part joins the order section (combo).
+  const s = $('#sf').elements, G = ghost(), C = combo(), R = C ? rvwUsd() : 0;
   return [
-    `Wyspa Build ${last.manual ? 'review' : 'quote'} request ${qid}`, '',
-    ...last.spec.map(l => l.replace(/NaN/g, '?')), `Quantity: ${last.sets > 1 ? (last.q === 1 ? `1 set of ${last.sets} parts` : `${last.q} sets of ${last.sets} parts (${last.q * last.sets} parts total)`) : last.q}`, ...(kind === 'rotor' ? [rotorNote()] : []),   // blank sizes (B49 sketch) read "?", not NaN
+    `Wyspa Build ${last.manual && !G ? 'review' : 'quote'} request ${qid}`, '',
+    ...(G ? [] : [...last.spec.map(l => l.replace(/NaN/g, '?')), `Quantity: ${last.sets > 1 ? (last.q === 1 ? `1 set of ${last.sets} parts` : `${last.q} sets of ${last.sets} parts (${last.q * last.sets} parts total)`) : last.q}`, ...(kind === 'rotor' ? [rotorNote()] : []),   // blank sizes (B49 sketch) read "?", not NaN
     // Converted sizes, e.g. "Thickness 3.2 mm (typed 1/8 in)", or "(typed 1/8, read as inches)" when no unit was typed (B131).
     ...(kind === 'assembly' ? [] : SIZES.map(n => fs(kind).querySelector(`[name="${n}"]`)).filter(el => el && !el.closest('[hidden]')).map(el => [el, size(el)]).filter(([, r]) => r.typed)
       .map(([el, r]) => `${el.parentNode.firstChild.textContent.replace(/\s*\(.*$/, '')} ${r.v} ${el.name === 'rD' ? 'in' : 'mm'} (${r.said})`)),
@@ -830,31 +868,31 @@ function summary(){
     ...(kind === 'molded' && pricedKind === 'molded' && inFile(fileSurf, val('mL'), val('mW'), val('mH')) ? [`Size: ${pricedFile} has no units. The typed sizes match it in inches, so we used inches.`] : []),   // B145
     ...(kind === 'panel' && pricedFile && qf.elements.pT.dataset.d === qf.elements.pT.value ? [`Thickness: not in ${pricedFile}, so we used ${size(qf.elements.pT).v} mm.`] : []), '',
     ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [last.units ? `No price yet. Please check these sizes: ${last.review.join(' ')}` : `We'll price this by hand: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
-      ...(C ? last.lines.filter(noRvw) : last.lines).map(l => `${l[0]}: ${usd(l[1])}`),
-      ...(C ? [`Subtotal for ${last.only}: ${usd(last.total - R)}`] : [
+      ...(C ? last.lines.filter(noMin) : last.lines).map(l => `${l[0]}: ${usd(l[1])}`),
+      ...(C ? [`${last.only ? `Subtotal for ${last.only}` : 'Typed part subtotal'}: ${usd(last.sub - R)}`] : [
         `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not a firm quote)${last.only ? '. We\'ll send one price for all your files. The review and minimum apply once.' : ''}`,
-        `Lead time: ${last.lead[0]}–${last.lead[1]} working days after approval (about ${readyRange()} if approved today)`])]),
+        `Lead time: ${last.lead[0]}–${last.lead[1]} working days after approval (about ${readyRange()} if approved today)`])])]),
     // B56: one line per other CAD file, with what was read from it.
     // B151: on the Assembly tab every attached file gets a line, the one dropped last too, with the size read from it.
     // B168: also when the part on screen is typed and a file was priced on another tab.
     ...(() => { const A = kind === 'assembly', o = cadNames().filter(n => A || n !== pricedFile);
       // B89: a file priced earlier keeps its spec, quantity and estimate.
       // B135: with every priced line (Parts, Setup, Mold, Review), like the file above, so the order total can be checked.
-      return o.length && (A || cadNames().length > 1 || !pricedFile && o.some(n => est.has(n) || rvw.has(n))) ? ['',...o.map(n => est.has(n) ? [`${n}: ${est.get(n).spec}. Quantity ${est.get(n).q}${est.get(n).sets > 1 ? ' sets' : ''}.`, ...(est.get(n).lines || []).filter(l => !C || noRvw(l)).map(l => `${l[0].replace(/^Part check$/, 'Part check (once per order)')}: ${usd(l[1])}`), C ? `Subtotal for ${n}: ${usd(est.get(n).sub - R)}` : `Estimate for ${n}: ${usd(est.get(n).sub)} (not a firm quote).`].join('\n')
+      return o.length && (A || cadNames().length > 1 || !pricedFile && o.some(n => est.has(n) || rvw.has(n))) ? [...(G ? [] : ['']), ...o.map(n => est.has(n) ? [`${n}: ${est.get(n).spec}. Quantity ${est.get(n).q}${est.get(n).sets > 1 ? ' sets' : ''}.`, ...(est.get(n).lines || []).filter(l => !C || noRvw(l)).map(l => `${l[0].replace(/^Part check$/, 'Part check (once per order)')}: ${usd(l[1])}`), C ? `Subtotal for ${n}: ${usd(est.get(n).sub - R)}` : `Estimate for ${n}: ${usd(est.get(n).sub)} (not a firm quote).`].join('\n')
         : rvw.has(n) ? `${n}: ${rvw.get(n).spec.replace(/NaN/g, '?')}. Quantity ${rvw.get(n).q}. ${rvw.get(n).units ? `No price yet. Check these sizes: ${rvw.get(n).why.join(' ')}` : `We'll price this by hand: ${rvw.get(n).why.join('; ')}`}`.replace(/\.?$/, '.') : A ? (readFiles.get(n) ? `${n}: ${readFiles.get(n)} (from the file).` : `${n}: we couldn't read its size.`)
         : readFiles.get(n) ? `${n}: ${readFiles.get(n)}. Not priced yet; we'll email a price.` : `${n}: couldn't read it; we'll email a price.`)] : []; })(),
     // B140: the order section. File subtotals + review (+ minimum top-up) = the order estimate.
     ...(C ? ['', `Order: ${C.txt}`, `Part check (once per order): ${usd(R)}`, ...(C.t < P.minOrder ? [`To reach ${usd(P.minOrder)} minimum: ${usd(P.minOrder - C.t)}`] : []),
       `Order estimate: ${usd(Math.max(C.t, P.minOrder))} (not a firm quote)`,
       `All parts ready about ${readyRange(C.lead)} if approved today (${C.lead[0]}–${C.lead[1]} working days)${C.slow ? `. ${C.slow} takes the longest, so it sets this date.` : ''}`] : []),   // B124: one ready line for the order
-    ...(last.warn.length ? ['', 'Notes:', ...last.warn.map(w => '- ' + w)] : []), '',
+    ...(last.warn.length && !G ? ['', 'Notes:', ...last.warn.map(w => '- ' + w)] : []), '',
     `Name: ${s.name.value}`, `Company: ${s.org.value}`, `Email: ${s.email.value}`, `Need by: ${s.need.value || 'flexible'}${({ sooner: ' (before our lead time, check with shop)', tight: ' (tight, check with shop)' })[needFit()] || ''}`,
     `Application and loads: ${s.notes.value}`, '', UPLOAD_URL ? '' : '[Attach CAD / drawings / sketch]'
   ].join('\n');
 }
 window.wyspaSummary = summary;   // read-only hook so scripts/shopper.mjs can check the email text without sending
 const mailto = () => {
-  location.href = `mailto:casey@wyspa.tech?subject=${encodeURIComponent((last.manual ? 'Review request ' : 'Quote request ') + qid)}&body=${encodeURIComponent(summary())}`;
+  location.href = `mailto:casey@wyspa.tech?subject=${encodeURIComponent((last.manual && !ghost() ? 'Review request ' : 'Quote request ') + qid)}&body=${encodeURIComponent(summary())}`;
   $('#msg').textContent = `Your email app should open now. Attach your files there. If nothing opens, email casey@wyspa.tech and quote ${qid}.`;
 };
 const b64 = f => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(',')[1]); r.onerror = no; r.readAsDataURL(f); });
@@ -862,7 +900,7 @@ const b64 = f => new Promise((ok, no) => { const r = new FileReader(); r.onload 
 const send = async pay => {
   const sf = $('#sf'), go = $('#go'), pb = $('#pay');
   if (!sf.reportValidity()) return;
-  if (kind === 'assembly' && !fs('assembly').querySelector('[name=aDesc]').value.trim()) { $('#msg').textContent = 'Tell us what it is first.'; fs('assembly').querySelector('[name=aDesc]').focus(); return; }
+  if (kind === 'assembly' && !ghost() && !fs('assembly').querySelector('[name=aDesc]').value.trim()) { $('#msg').textContent = 'Tell us what it is first.'; fs('assembly').querySelector('[name=aDesc]').focus(); return; }
   if (!UPLOAD_URL) return mailto();
   const files = [...sf.elements.files.files];
   const bad = files.find(f => !canSend(f.name));
