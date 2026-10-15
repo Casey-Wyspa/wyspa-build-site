@@ -181,7 +181,7 @@
     const round = Math.min(Math.max(0, holes), loops.filter(isRound).length);
     // B132: each hole's edge length (m), so the page doesn't charge a hole's edge twice (it's already in cutM).
     const holeM = loops.length === Math.max(0, holes) ? loops.map(s => s.len * scale / 1000) : null;
-    return { kind: 'panel', L: (x1 - x0) * scale, W: (y1 - y0) * scale, cutM: part.len * scale / 1000, holes: Math.max(0, holes), round, holeM, parts, units, inch: uc === 1 };
+    return { kind: 'panel', L: (x1 - x0) * scale, W: (y1 - y0) * scale, cutM: part.len * scale / 1000, holes: Math.max(0, holes), round, holeM, parts, units, inch: uc === 1 || scale === 25.4 && !uc };
   }
 
   // ---------- 3D meshes ----------
@@ -287,23 +287,29 @@
     const q = a * 1e-5, key = i => `${Math.round(t[i] / q)},${Math.round(t[i + 1] / q)},${Math.round(t[i + 2] / q)}`, edges = new Map();
     for (let i = 0; i + 8 < t.length; i += 9) {
       const k = [key(i), key(i + 3), key(i + 6)];
-      for (let j = 0; j < 3; j++) { const e = [k[j], k[(j + 1) % 3]].sort().join('|'); edges.set(e, (edges.get(e) || 0) + 1); }
+      for (let j = 0; j < 3; j++) { const e = [k[j], k[(j + 1) % 3]].sort().join('|'), o = edges.get(e); if (o) o.n++; else edges.set(e, { n: 1, p: i + 3 * j, r: i + 3 * ((j + 1) % 3) }); }
     }
-    const open = [...edges.values()].some(v => v === 1), oneSide = open ? area : area / 2;
+    let openLen = 0;   // total length of edges used once (holes in the mesh)
+    for (const o of edges.values()) if (o.n === 1) openLen += Math.hypot(t[o.p] - t[o.r], t[o.p + 1] - t[o.r + 1], t[o.p + 2] - t[o.r + 2]);
+    const open = openLen > 0;
     vol = Math.abs(vol);
     // B104: an open surface (a Rhino cover exported as a surface) has no volume or wall; its "volume" depends on where the origin is.
     // Tested by shape, not shared edges, since STEP faces are meshed apart even on a closed solid.
     let wall = vol > 0 && Math.hypot(...S) < 0.1 * area ? 2 * vol / area : 0;   // thin shell: volume ≈ (area / 2) × wall
+    // B156: a measured wall means two skins, so one side is half the area, even with a small gap in the mesh (a nozzle hole
+    // exported with no rim face): open edges shorter than half the footprint's perimeter. A real open surface keeps its full area.
+    const oneSide = !open || wall > 0 && openLen < (a + b) ? area / 2 : area;
     // No units (STL) and tiny: almost certainly drawn in inches, same rule as DXF. Small-ish: ask.
     if (U === 'assumed mm' && a < 25) { s = 25.4; [a, b, c, wall] = [a, b, c, wall].map(v => v * 25.4); U = "assumed inches; change the size if that's wrong"; }
     else if (U === 'assumed mm' && a < 60) U = "read as mm; if it's in inches, fix the size";
     // B107: shallow (under 4% of the width) is flat only if the depth is under 3 walls; a shallow dome or open surface is molded.
-    if (c <= Math.max(wall * 1.5, 0.5) || c < 0.04 * b && c <= 3 * wall) return { kind: 'panel', L: a, W: b, T: c, units: U, ...plateEdges(t, ax, c / s, s) };
+    // B159: inch: an auto-scaled inch file is shown in inches first, like an inch DXF or STEP (B57/B66).
+    if (c <= Math.max(wall * 1.5, 0.5) || c < 0.04 * b && c <= 3 * wall) return { kind: 'panel', L: a, W: b, T: c, units: U, inch: s > 1, ...plateEdges(t, ax, c / s, s) };
     const m2 = oneSide * s * s / 1e6, shape = m2 * 1e6 / (a * b);   // mold-side surface (m²) vs. footprint
     // B125, in file units. The gap is capped at half the depth: an open surface can give a made-up wall (B104), and a wall
     // over a quarter of the depth is already "closed or solid" on the page.
     const wrap = wrapFrac(t, ax, lo, hi, Math.max(Math.min(3 * wall / s, 0.5 * ext[ax]), 0.15 * ext[ax]), !open);
-    return { kind: 'molded', L: a, W: b, H: c, wall, m2, complex: shape > 2.5 || wrap > 0.35, units: U };
+    return { kind: 'molded', L: a, W: b, H: c, wall, m2, complex: shape > 2.5 || wrap > 0.35, units: U, inch: s > 1 };
   }
 
   // B125: a part that wraps around (a tube, duct or closed box) has skin on both the top and the bottom along the pull

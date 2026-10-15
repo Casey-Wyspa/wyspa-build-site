@@ -271,7 +271,9 @@ const fs = k => qf.querySelector(`fieldset[data-k="${k}"]`);
 const SIZES = ['pL', 'pW', 'pT', 'pSkin', 'rD', 'mL', 'mW', 'mH', 'mWall'];
 const NUM = /^(?:(\d+(?:\.\d*)?|\.\d+)|(?:(\d+)(?:\s+|\s*-\s*))?(\d+)\s*\/\s*(\d+))\s*(mm|cm|in|inch|inches|")?$/;
 function size(el){
-  const fu = el.name === 'rD' ? 'in' : 'mm', s = el.value.trim().toLowerCase().replace(/[”″]|''/g, '"').replace(/[’′]/g, "'");
+  // B158: phone keyboards type ½ ¼ ¾ ⅛ ⅜ ⅝ ⅞ ("14½ in", "¾ in"); read them as " 1/2" and so on.
+  const fu = el.name === 'rD' ? 'in' : 'mm', s = el.value.trim().toLowerCase().replace(/[”″]|''/g, '"').replace(/[’′]/g, "'").replace(/⁄/g, '/')
+    .replace(/\s*([½¼¾⅛⅜⅝⅞])/g, (_, c) => ' ' + { '½': '1/2', '¼': '1/4', '¾': '3/4', '⅛': '1/8', '⅜': '3/8', '⅝': '5/8', '⅞': '7/8' }[c]).trim();
   // B128: feet, or feet and inches: "3 ft", "1.5 ft", "1' 6\"", "1 ft 6 in" (the inches may be bare or a fraction).
   const ft = s.match(/^(\d+(?:\.\d*)?|\.\d+)\s*(?:ft|feet|foot|')\s*(.*)$/), fi = ft && ft[2] && ft[2].match(NUM);
   let m, num, u, said;
@@ -450,7 +452,7 @@ function calc(){
   } else {
     const txt = n => fs('assembly').querySelector(`[name="${n}"]`).value.trim();
     review.push('Assembly');
-    spec.push(`Assembly: ${txt('aDesc').replace(/[.\s]+$/, '') || '(none given)'}`, `Overall size: ${txt('aSize') || '?'}${/(mm|cm|in|ft|feet|\bm\b|["'”″’′])/i.test(txt('aSize')) ? '' : ' mm'}`);   // B152: no "mm" after a typed unit
+    spec.push(`Assembly: ${txt('aDesc').replace(/[.\s]+$/, '') || '(none given)'}`, `Overall size: ${txt('aSize') || '?'}${!txt('aSize') || /(mm|cm|in|ft|feet|\bm\b|["'”″’′])/i.test(txt('aSize')) ? '' : ' mm'}`);   // B152: no "mm" after a typed unit
   }
   // B116: ready date grows with the order. Work days = shop labor at 8 h/day, or mold cures (one mold), whichever is longer; the base range already holds 5 days.
   // Over maxLeadDays at the high end: no instant date (research/pricing/lead-time-2026-10-14.md).
@@ -542,7 +544,7 @@ function applyFile(g, file, sketch, picked) {
   if (sketch && !typed) SIZES.filter(n => n !== 'pSkin').forEach(n => { const el = fs(kind).querySelector(`[name="${n}"]`); if (el) el.value = ''; });
   if (sketch) $('#cadmsg').textContent = typed ? 'File attached. We\'ll use it with the sizes you typed.' : 'File attached. Type the size to see a price.';
   // B56: what was read from each file, for the email lines about files we don't price ('' = nothing read).
-  readFiles.set(file.name, !g ? '' : (g.parts ? `${g.parts.length} separate parts (${g.parts.map(p => p.map(Math.round).join(' × ')).join(', ')} mm)` : g.inch ? `${inch(g.L)} × ${inch(g.W)}${g.H ? ` × ${inch(g.H)}` : ''} in` : `${Math.round(g.L)} × ${Math.round(g.W)}${g.H ? ` × ${Math.round(g.H)}` : ''} mm`)   // B146: a file with several parts lists them, not the sheet
+  readFiles.set(file.name, !g ? '' : (g.parts ? `${g.parts.length} separate parts (${g.parts.map(p => p.map(Math.round).join(' × ')).join(', ')} mm)` : g.inch ? `${inch(g.L)} × ${inch(g.W)}${g.H ? ` × ${inch(g.H)}` : ''} in (${Math.round(g.L)} × ${Math.round(g.W)}${g.H ? ` × ${Math.round(g.H)}` : ''} mm)` : `${Math.round(g.L)} × ${Math.round(g.W)}${g.H ? ` × ${Math.round(g.H)}` : ''} mm`)   // B146: a file with several parts lists them, not the sheet
     + (g.holes != null && g.kind === 'panel' ? `, ${holeTxt(g.holes, g.round)}` : '') + (g.kind === 'molded' && g.wall ? (g.wall < 0.5 ? ', wall to confirm' : `, about ${Math.ceil(g.wall * 10 - 1e-9) / 10} mm wall`) : ''));
   if (!g) return render();
   // B89: a new part keeps the quantity on screen (a default would be just as much a guess), and the file message says what it is.
@@ -560,7 +562,7 @@ function applyFile(g, file, sketch, picked) {
     what = `${qf.elements.rD.value} in diameter (${/^assumed inches/.test(g.units) ? 'no units in the file, so we assumed inches'
       : /^(assumed mm|read as mm)/.test(g.units) ? `${r(g.L)} mm across; no units in the file, so we assumed mm` : `${r(g.L)} mm across, ${g.units}`})`;
   } else if (kind === 'assembly') {
-    what = `${r(g.L)} × ${r(g.W)} mm overall`;
+    what = `${g.inch ? `${inch(g.L)} × ${inch(g.W)} in (${r(g.L)} × ${r(g.W)} mm)` : `${r(g.L)} × ${r(g.W)} mm`} overall`;   // B159
   } else if (g.kind === 'panel') {
     setKind('panel', true);
     put('pL', r(g.L)); put('pW', r(g.W));
