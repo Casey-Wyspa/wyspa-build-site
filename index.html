@@ -394,7 +394,11 @@ function calc(){
     const m = P.plies[val('mMat')], c = P.molded.complexity[cx.value], M = P.molded;
     // Wall thickness in mm -> whole plies of the chosen fabric, rounded up
     const wall = val('mWall') || 1, n = Math.max(1, Math.ceil(wall / m.t - 1e-9));
-    const fromFile = fileSurf && fileSurf.L === L && fileSurf.W === W && fileSurf.H === H, a = fromFile ? fileSurf.m2 : (L * W + 2 * H * (L + W)) / 1e6;   // B68: the file's own surface while its sizes are unchanged
+    const fromFile = fileSurf && fileSurf.L === L && fileSurf.W === W && fileSurf.H === H; let a = fromFile ? fileSurf.m2 : (L * W + 2 * H * (L + W)) / 1e6;   // B68: the file's own surface while its sizes are unchanged
+    // B145: a unitless file read as mm, retyped as the file's sizes in inches (within 5%, like B133): the file's surface in inches,
+    // scaled to the typed size (x 25.4² when they match exactly).
+    const fIn = !fromFile && inFile(fileSurf, L, W, H);
+    if (fIn) a = fileSurf.m2 * ((L + W + H) / fileSurf.f.reduce((s, v) => s + v, 0)) ** 2;
     mat = a * n * plyM2(val('mMat'), a * n * q); fabA = a * n * q; fabSave = a * n * m.perM2 - mat;
     // Thick wet layups cure in stages (carbon about 4,000 gsm of fabric per cure, glass its own cureGsm); each extra cure adds bagging time. Prepreg cures once.
     const cures = val('mMat') === 'prepreg' ? 1 : Math.max(1, Math.ceil(n * m.gsm / (m.cureGsm || M.wetGsmPerCure) - 1e-9));
@@ -439,11 +443,11 @@ function calc(){
       wallQ = wall < 0.5 && wEl.value === wEl.dataset.f;
       if (wall < 0.5) review.push(UQ(`Wall under 0.5 mm. ${wallQ ? 'Is the file in inches?' : `Is it in inches?${typedIn('mWall')}`}`));
     }
-    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${+a.toPrecision(3)} m² ${fromFile ? 'surface, measured from your file' : 'surface, estimated from your dimensions'}), ${wallQ ? 'wall to confirm' : `${wall} mm wall${review.length ? '' : ` (${n} ${n === 1 ? 'ply' : 'plies'})`}`}, ${m.label}, ${c.label}, ${val('mTool') === 'new' ? 'new mold' : 'repeat order, our existing mold'}`);   // B129: from the Mold choice, not the mold price (blank sizes made it say "existing mold")
+    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${+a.toPrecision(3)} m² ${fromFile || fIn ? 'surface, measured from your file' : 'surface, estimated from your dimensions'}), ${wallQ ? 'wall to confirm' : `${wall} mm wall${review.length ? '' : ` (${n} ${n === 1 ? 'ply' : 'plies'})`}`}, ${m.label}, ${c.label}, ${val('mTool') === 'new' ? 'new mold' : 'repeat order, our existing mold'}`);   // B129: from the Mold choice, not the mold price (blank sizes made it say "existing mold")
   } else {
     const txt = n => fs('assembly').querySelector(`[name="${n}"]`).value.trim();
     review.push('Assembly');
-    spec.push(`Assembly: ${txt('aDesc') || '(none given)'}`, `Overall size: ${txt('aSize') || '?'} mm`);
+    spec.push(`Assembly: ${txt('aDesc').replace(/[.\s]+$/, '') || '(none given)'}`, `Overall size: ${txt('aSize') || '?'} mm`);
   }
   // B116: ready date grows with the order. Work days = shop labor at 8 h/day, or mold cures (one mold), whichever is longer; the base range already holds 5 days.
   // Over maxLeadDays at the high end: no instant date (research/pricing/lead-time-2026-10-14.md).
@@ -500,6 +504,8 @@ function calc(){
 
 let fileGeo = null, fileSurf = null, fileSolid = false, needSize = false, badSize = false, pricedFile = '', pricedKind = '', unitEl = null, unitAs = 'mm';
 const readFiles = new Map(), inch = mm => +(mm / 25.4).toFixed(2);
+// B145: typed L, W and H each within 5% of a unitless file's own sizes × 25.4 (the file read as mm is really in inches).
+const inFile = (s, L, W, H) => !!(s && s.nu && [L, W, H].every((v, i) => s.f[i] > 0 && v > 0 && Math.abs(v / (s.f[i] * 25.4) - 1) <= 0.05));
 // B122: "9 holes, 3 cutouts" when the file told round holes from other cutouts (rd = round ones of n); words only, the price uses n.
 function holeTxt(n, rd) {
   const pl = (k, w) => `${k} ${w}${k === 1 ? '' : 's'}`;
@@ -539,10 +545,10 @@ function applyFile(g, file, sketch, picked) {
   // B89: a new part keeps the quantity on screen (a default would be just as much a guess), and the file message says what it is.
   const newPart = [...fileCtx.keys()].some(n => n !== file.name && cadNames().includes(n));
   pricedFile = file.name;
-  fileSurf = g.kind === 'molded' && g.m2 > 0 ? { L: Math.round(g.L), W: Math.round(g.W), H: Math.round(g.H), m2: g.m2 } : null;   // B68: the file's real surface
+  fileSurf = g.kind === 'molded' && g.m2 > 0 ? { L: Math.round(g.L), W: Math.round(g.W), H: Math.round(g.H), m2: g.m2, f: [g.L, g.W, g.H], nu: !g.inch && /^(assumed mm|read as mm)/.test(g.units) } : null;   // B68: the file's real surface (B145: f, nu for an inch file read as mm)
   // data-f marks a value that came from the file, so the typed-in-inches checks (B36) skip it.
   const r = Math.round, put = (n, v) => { const el = qf.querySelector(`[name="${n}"]`); el.value = v; el.dataset.f = el.value; };
-  let what;
+  let what, inHead = '', wallIn = '';
   const moved = !picked && kind === 'panel' && g.kind === 'molded';   // B107: a 3D file dropped on Flat panel that isn't flat
   if (kind === 'rotor') {
     // A file means they have a design; keep "Repeat order" if they picked it (B17).
@@ -574,6 +580,12 @@ function applyFile(g, file, sketch, picked) {
     put('mCx', g.complex || fileSolid ? 'complex' : span > 0 && g.H / span <= 0.5 ? 'simple' : 'medium');
     // B66: an inch STEP is shown in inches first, like an inch DXF (B57).
     what = `${g.inch ? `${inch(g.L)} × ${inch(g.W)} × ${inch(g.H)} in (${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm)` : `${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm`}${g.wall ? `, about ${wall} mm wall` : ''}`;
+    // B147: the same file read as inches, shown once the typed sizes match it in inches (inchNote).
+    if (fileSurf && fileSurf.nu && !fileSolid) {
+      const n2 = v => +v.toFixed(2);
+      wallIn = g.wall ? Math.ceil(g.wall * 254 - 1e-9) / 10 : '';
+      inHead = `From ${file.name}, in inches to match your sizes: ${n2(g.L)} × ${n2(g.W)} × ${n2(g.H)} in (${r(g.L * 25.4)} × ${r(g.W * 25.4)} × ${r(g.H * 25.4)} mm)${wallIn ? `, about ${wallIn} mm wall` : ''}.`;
+    }
   }
   // B44/B55: carry a guessed unit (mm or inches) into the email while the size from the file is unchanged.
   unitEl = /^(assumed|read as)/.test(g.units) && (kind === 'panel' || kind === 'molded') ? qf.querySelector(`[name="${kind === 'panel' ? 'pL' : 'mL'}"]`) : null;
@@ -583,12 +595,12 @@ function applyFile(g, file, sketch, picked) {
   const t = qf.elements.pT;
   if (noT && t.value === t.defaultValue) t.dataset.d = t.value; else delete t.dataset.d;
   const tMsg = thickMsg();
-  const ctx = { fileSurf, fileGeo, fileSolid, unitEl, unitAs, msg: '', g };
+  const ctx = { fileSurf, fileGeo, fileSolid, unitEl, unitAs, msg: '', g, head: `From ${file.name}: ${what} (${g.units}).`, inHead, wallIn, wall0: kind === 'molded' ? qf.elements.mWall.value : '' };
   pricedKind = kind; tabFile[kind] = { f: file.name, c: ctx }; fileCtx.set(file.name, ctx);
   render();
   $('#cadmsg').textContent = fileSolid
     ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part (blade, foil, mast or tube). It needs a two-piece mold, so we price it by hand. Send it and we'll reply with a price.`
-    : `From ${file.name}: ${what}${kind === 'rotor' ? '' : ` (${g.units})`}.${moved ? ' This part isn\'t flat, so we priced it as a molded part.' : ''}${newPart ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
+    : `From ${file.name}: ${what}${kind === 'rotor' ? '' : ` (${g.units})`}.${moved ? (last.manual ? ' This part isn\'t flat, so it\'s a molded part.' : ' This part isn\'t flat, so we priced it as a molded part.') : ''}${newPart ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
   ctx.msg = $('#cadmsg').textContent.replace(QNOTE, '');
 }
 // B58: a thickness the buyer typed is echoed as typed ("your 1/8 in"), not as if the site chose it.
@@ -599,6 +611,13 @@ const TMSG = /( Your file has no thickness, so )(?:type it in|it's set to \S+ mm
 function thickNote(){ const el = $('#cadmsg'); if (!TMSG.test(el.textContent)) return;
   el.textContent = el.textContent.replace(TMSG, (_, a) => `${a}${thickMsg()}.`);
   const c = pricedFile && pricedKind === 'panel' && fileCtx.get(pricedFile); if (c) c.msg = el.textContent.replace(QNOTE, ''); }
+// B145/B147: Length, Width and Depth retyped to match a unitless file in inches: the file message reads the file as inches and a
+// file wall still untouched is scaled to inches too. Typing sizes that don't match puts both back.
+function inchNote(){ const c = pricedFile && pricedKind === 'molded' && kind === 'molded' && fileCtx.get(pricedFile); if (!c || !c.inHead) return;
+  const on = inFile(c.fileSurf, val('mL'), val('mW'), val('mH')), el = $('#cadmsg'), w = qf.elements.mWall;
+  el.textContent = el.textContent.replace(on ? c.head : c.inHead, on ? c.inHead : c.head);
+  if (c.wallIn && w.value === w.dataset.f && w.value !== String(on ? c.wallIn : c.wall0)) { w.value = on ? c.wallIn : c.wall0; w.dataset.f = w.value; }
+  c.msg = el.textContent.replace(QNOTE, ''); }
 // B88: the upload server (upload-script/Code.gs OK_EXT) only saves these types; keep the two lists the same.
 // Anything else (HEIC, WebP, GIF, Word...) used to be dropped without a word, so refuse it here instead.
 const SEND_OK = /\.(step|stp|iges|igs|stl|obj|3dm|dxf|dwg|pdf|sldprt|sldasm|x_t|x_b|f3d|png|jpe?g|zip)$/i;
@@ -664,7 +683,8 @@ function draw(){
     return el.value.trim() === '' ? req : !(v >= 0) || (req && v <= 0);
   }) || (!last.manual && !isFinite(last.total)));
   if (pricedFile && kind === pricedKind && !badSize && !needSize) {
-    if (last.manual) { est.delete(pricedFile); rvw.set(pricedFile, { q: last.q, spec: last.spec[0], why: last.review, units: last.units }); }
+    // B151: a file on the Assembly tab is listed in the email with its own size, not the assembly's description.
+    if (last.manual) { est.delete(pricedFile); if (kind === 'assembly') rvw.delete(pricedFile); else rvw.set(pricedFile, { q: last.q, spec: last.spec[0], why: last.review, units: last.units }); }
     else { est.set(pricedFile, { sub: last.sub, q: last.q, spec: last.spec[0], lead: last.lead, lines: last.lines.filter(l => !/^Minimum order/.test(l[0])) }); rvw.delete(pricedFile); }   // B135: lines for the email
   }
   if (badSize) {
@@ -742,7 +762,7 @@ function setKind(k, byFile){
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setKind(b.dataset.k));
 qf.addEventListener('input', e => { if (e.target.name === 'qty' || e.target.name === 'mCx') e.target.dataset.t = 1;
   if (e.target.name === 'qty') $('#cadmsg').textContent = $('#cadmsg').textContent.replace(QNOTE, ''); delete e.target.dataset.d; needSize = false;
-  if (e.target.name === 'pT' && kind === 'panel') thickNote(); render(); });
+  if (e.target.name === 'pT' && kind === 'panel') thickNote(); if (/^m[LWH]$/.test(e.target.name)) inchNote(); render(); });
 // No past dates in Need by (B33).
 { const t = new Date(); $('#sf').elements.need.min = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; }
 $('#sf').elements.need.addEventListener('change', needNote);
@@ -763,6 +783,7 @@ function summary(){
     ...(kind === 'assembly' ? [] : SIZES.map(n => fs(kind).querySelector(`[name="${n}"]`)).filter(el => el && !el.closest('[hidden]')).map(el => [el, size(el)]).filter(([, r]) => r.typed)
       .map(([el, r]) => `${el.parentNode.firstChild.textContent.replace(/\s*\(.*$/, '')} ${r.v} ${el.name === 'rD' ? 'in' : 'mm'} (${r.said})`)),
     ...(unitEl && !unitEl.closest('fieldset').hidden && unitEl.value === unitEl.dataset.f ? [`Size: ${pricedFile} has no units, so we assumed ${unitAs}.`] : []),
+    ...(kind === 'molded' && pricedKind === 'molded' && inFile(fileSurf, val('mL'), val('mW'), val('mH')) ? [`Size: ${pricedFile} has no units. The typed sizes match it in inches, so we used inches.`] : []),   // B145
     ...(kind === 'panel' && pricedFile && qf.elements.pT.dataset.d === qf.elements.pT.value ? [`Thickness: not in ${pricedFile}, so we used ${size(qf.elements.pT).v} mm.`] : []), '',
     ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [last.units ? `No price yet. Please check these sizes: ${last.review.join(' ')}` : `We'll price this by hand: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
       ...(C ? last.lines.filter(noRvw) : last.lines).map(l => `${l[0]}: ${usd(l[1])}`),
@@ -770,11 +791,13 @@ function summary(){
         `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not a firm quote)${last.only ? '. We\'ll send one price for all your files. The review and minimum apply once.' : ''}`,
         `Lead time: ${last.lead[0]}–${last.lead[1]} working days after approval (about ${readyRange()} if approved today)`])]),
     // B56: one line per other CAD file, with what was read from it.
-    ...(() => { const o = cadNames().filter(n => n !== pricedFile);
+    // B151: on the Assembly tab every attached file gets a line, the one dropped last too, with the size read from it.
+    ...(() => { const A = kind === 'assembly', o = cadNames().filter(n => A || n !== pricedFile);
       // B89: a file priced earlier keeps its spec, quantity and estimate.
       // B135: with every priced line (Parts, Setup, Mold, Review), like the file above, so the order total can be checked.
-      return o.length && cadNames().length > 1 ? ['', ...o.map(n => est.has(n) ? [`${n}: ${est.get(n).spec}. Quantity ${est.get(n).q}.`, ...(est.get(n).lines || []).filter(l => !C || noRvw(l)).map(l => `${l[0].replace(/^Part check$/, 'Part check (once per order)')}: ${usd(l[1])}`), C ? `Subtotal for ${n}: ${usd(est.get(n).sub - R)}` : `Estimate for ${n}: ${usd(est.get(n).sub)} (not a firm quote).`].join('\n')
-        : rvw.has(n) ? `${n}: ${rvw.get(n).spec.replace(/NaN/g, '?')}. Quantity ${rvw.get(n).q}. ${rvw.get(n).units ? `No price yet. Check these sizes: ${rvw.get(n).why.join(' ')}` : `We'll price this by hand: ${rvw.get(n).why.join('; ')}`}`.replace(/\.?$/, '.') : readFiles.get(n) ? `${n}: ${readFiles.get(n)}. Not priced yet; we'll email a price.` : `${n}: couldn't read it; we'll email a price.`)] : []; })(),
+      return o.length && (A || cadNames().length > 1) ? ['',...o.map(n => est.has(n) ? [`${n}: ${est.get(n).spec}. Quantity ${est.get(n).q}.`, ...(est.get(n).lines || []).filter(l => !C || noRvw(l)).map(l => `${l[0].replace(/^Part check$/, 'Part check (once per order)')}: ${usd(l[1])}`), C ? `Subtotal for ${n}: ${usd(est.get(n).sub - R)}` : `Estimate for ${n}: ${usd(est.get(n).sub)} (not a firm quote).`].join('\n')
+        : rvw.has(n) ? `${n}: ${rvw.get(n).spec.replace(/NaN/g, '?')}. Quantity ${rvw.get(n).q}. ${rvw.get(n).units ? `No price yet. Check these sizes: ${rvw.get(n).why.join(' ')}` : `We'll price this by hand: ${rvw.get(n).why.join('; ')}`}`.replace(/\.?$/, '.') : A ? (readFiles.get(n) ? `${n}: ${readFiles.get(n)} (from the file).` : `${n}: we couldn't read its size.`)
+        : readFiles.get(n) ? `${n}: ${readFiles.get(n)}. Not priced yet; we'll email a price.` : `${n}: couldn't read it; we'll email a price.`)] : []; })(),
     // B140: the order section. File subtotals + review (+ minimum top-up) = the order estimate.
     ...(C ? ['', `Order: ${C.txt}`, `Part check (once per order): ${usd(R)}`, ...(C.t < P.minOrder ? [`To reach ${usd(P.minOrder)} minimum: ${usd(P.minOrder - C.t)}`] : []),
       `Order estimate: ${usd(Math.max(C.t, P.minOrder))} (not a firm quote)`,
