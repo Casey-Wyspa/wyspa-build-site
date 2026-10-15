@@ -441,6 +441,9 @@ function calc(){
     // scaled to the typed size (x 25.4² when they match exactly).
     const fIn = !fromFile && inFile(fileSurf, L, W, H);
     if (fIn) a = fileSurf.m2 * ((L + W + H) / fileSurf.f.reduce((s, v) => s + v, 0)) ** 2;
+    // B186: typed sizes differ from the file's: keep the file's measured surface, scaled by the box surface at the typed sizes over the file's.
+    const box = (l, w, h) => l * w + 2 * h * (l + w), fSc = !fromFile && !fIn && fileSurf && L > 0 && W > 0 && box(fileSurf.L, fileSurf.W, fileSurf.H) > 0;
+    if (fSc) { a = fileSurf.m2 * box(L, W, H) / box(fileSurf.L, fileSurf.W, fileSurf.H); warn.push('You changed the size, so we scaled your file\'s surface area to match.'); }
     mat = a * n * plyM2(val('mMat'), a * n * q); fabA = a * n * q; fabSave = a * n * m.perM2 - mat;
     // Thick wet layups cure in stages (carbon about 4,000 gsm of fabric per cure, glass its own cureGsm); each extra cure adds bagging time. Prepreg cures once.
     const cures = val('mMat') === 'prepreg' ? 1 : Math.max(1, Math.ceil(n * m.gsm / (m.cureGsm || M.wetGsmPerCure) - 1e-9));
@@ -487,7 +490,7 @@ function calc(){
       wallQ = wall < 0.5 && wEl.value === wEl.dataset.f;
       if (wall < 0.5) review.push(UQ(`Wall under 0.5 mm. ${wallQ ? 'Is the file in inches?' : `Is it in inches?${typedIn('mWall')}`}`));
     }
-    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${+a.toPrecision(3)} m² ${fromFile || fIn ? 'surface, measured from your file' : 'surface, estimated from your dimensions'}), ${wallQ ? 'wall to confirm' : `${wall} mm wall${review.length ? '' : ` (${n} ${n === 1 ? 'ply' : 'plies'})`}`}, ${m.label}, ${c.label}, ${val('mTool') === 'new' ? 'new mold' : 'repeat order, our existing mold'}`);   // B129: from the Mold choice, not the mold price (blank sizes made it say "existing mold")
+    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${+a.toPrecision(3)} m² ${fromFile || fIn ? 'surface, measured from your file' : fSc ? 'surface, from your file scaled to your size' : 'surface, estimated from your dimensions'}), ${wallQ ? 'wall to confirm' : `${wall} mm wall${review.length ? '' : ` (${n} ${n === 1 ? 'ply' : 'plies'})`}`}, ${m.label}, ${c.label}, ${val('mTool') === 'new' ? 'new mold' : 'repeat order, our existing mold'}`);   // B129: from the Mold choice, not the mold price (blank sizes made it say "existing mold")
   } else {
     const txt = n => fs('assembly').querySelector(`[name="${n}"]`).value.trim();
     review.push('Assembly');
