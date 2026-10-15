@@ -69,6 +69,7 @@ html,body{margin:0;background:#eef2f3}
 .wb label{display:grid;gap:6px;font:500 12px/1.3 var(--m);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .wb label.full{grid-column:1/-1}
 .wb label[hidden]{display:none}
+.wb [hidden]{display:none!important}   /* B175: .btn's display:inline-block showed the hidden card button to everyone */
 .wb input,.wb select,.wb textarea{font:400 16px/1.4 var(--b);color:var(--ink);background:var(--sheet);border:1px solid var(--rule);padding:10px 12px;width:100%;border-radius:0;text-transform:none;letter-spacing:0}
 .wb input:focus,.wb select:focus,.wb textarea:focus{outline:2px solid var(--sea);outline-offset:-1px}
 .wb .chk{display:flex;gap:10px;align-items:center;text-transform:none;letter-spacing:0;font:400 15px var(--b);color:var(--ink)}
