@@ -711,10 +711,11 @@ function setKind(k, byFile){
     pricedFile = f; pricedKind = k; ({ fileSurf, fileGeo, fileSolid, unitEl, unitAs } = c);
     $('#cadmsg').textContent = c.msg;
   } else if (!byFile && k !== kind && pricedFile) { pricedFile = ''; pricedKind = ''; }   // a tab with no file: a typed part, not the last file's
-  // Keep a quantity the buyer typed when the tab changes (by click or by an uploaded file).
+  // B137: each tab keeps its own quantity on a tab click (typed plates x100 and a cover x10 no longer overwrite each other).
+  // Only an uploaded file that moves to another tab carries the quantity on screen with it (B89).
   const q0 = kind && fs(kind) && fs(kind).querySelector('[name=qty]'), q1 = fs(k).querySelector('[name=qty]');
   // B51: a typed quantity stays even if it equals the default (data-t is set when the box is typed in).
-  if (!back && q0 && q0 !== q1 && (q0.dataset.t || q0.value !== q0.defaultValue)) { q1.value = q0.value; q1.dataset.t = q0.dataset.t || ''; }
+  if (byFile && !back && q0 && q0 !== q1 && (q0.dataset.t || q0.value !== q0.defaultValue)) { q1.value = q0.value; q1.dataset.t = q0.dataset.t || ''; }
   kind = k;
   document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.k === k));
   qf.querySelectorAll('fieldset').forEach(f => f.hidden = f.dataset.k !== k);
