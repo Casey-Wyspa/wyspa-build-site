@@ -95,6 +95,7 @@ html,body{margin:0;background:#eef2f3}
 .wb .ct{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin-top:24px}
 .wb .ct .v{font:500 18px var(--m);color:var(--ink)}
 .wb .bar{display:none}
+.wb .paylink{display:inline-block;margin:6px 0 4px;font:600 15px var(--b);color:var(--sea)}
 @media (max-width:820px){
  .wb .hero,.wb .two,.wb .sh,.wb .qt{grid-template-columns:minmax(0,1fr)}
  .wb .est{position:static}
@@ -151,8 +152,8 @@ html,body{margin:0;background:#eef2f3}
  <div class="sh"><div class="lb">How it works</div><div><h2>Three steps</h2></div></div>
  <ol class="steps">
   <li><h3>Get a price</h3><p>Type the size or drop a file. You see a price in seconds.</p></li>
-  <li><h3>Send it</h3><p>We check the layers and reply with a firm quote.</p></li>
-  <li><h3>Approve it</h3><p>Pay by card, or use Send to pay by bank transfer or PO. We make and ship your parts.</p></li>
+  <li><h3>Order it</h3><p>Pay by card, or use Send for a firm quote. Bank transfer and PO go through Send.</p></li>
+  <li><h3>We build it</h3><p>We check every order before we start. Then we make and ship your parts.</p></li>
  </ol>
 </section>
 
@@ -213,6 +214,7 @@ html,body{margin:0;background:#eef2f3}
   <aside class="est" id="est" aria-live="polite">
    <div class="lb"><span id="estlb">Estimate</span> · <span id="qid"></span></div>
    <div class="tot" id="tot">$0</div>
+   <a class="paylink" id="paylink" href="#send" hidden>Order and pay by card ↓</a>
    <div class="note" style="margin-top:0" id="per"></div>
    <table id="lines"></table>
    <div class="warn" id="warn"></div>
@@ -220,7 +222,7 @@ html,body{margin:0;background:#eef2f3}
   </aside>
  </div>
 
- <div class="send">
+ <div class="send" id="send">
   <h3>Send it</h3>
   <p class="note" style="margin-top:6px" id="sendnote"></p>
   <form id="sf" onsubmit="return false">
@@ -257,9 +259,10 @@ const P = window.WYSPA_PRICING, $ = s => document.querySelector(s), qf = $('#qf'
 // Google Apps Script web app that saves uploads to Drive and emails Casey (upload-script/Code.gs). Empty = email-only fallback.
 const UPLOAD_URL = P.uploadUrl || '';
 // Card checkout (Square link made by the same Apps Script). Off unless pricing.js checkoutEnabled, or ?checkout=1 for testing.
-const Q = new URLSearchParams(location.search), CHECKOUT = !!UPLOAD_URL && (P.checkoutEnabled === true || Q.get('checkout') === '1');
-// Back from Square: ?paid=WB-... (Square may add its own parameters after it).
-{ const id = Q.get('paid'); if (id && /^WB-[A-Z0-9-]{4,20}$/i.test(id)) document.getElementById('paid').textContent = `Payment received for ${id}. We'll check your order and email you within 1 working day.`; }
+// Back from Square: ?paid=WB-... (Square may add its own parameters after it). No card button then, so nobody pays twice; Send still works.
+const Q = new URLSearchParams(location.search), PAID = /^WB-[A-Z0-9-]{4,20}$/i.test(Q.get('paid') || '') && Q.get('paid');
+const CHECKOUT = !!UPLOAD_URL && !PAID && (P.checkoutEnabled === true || Q.get('checkout') === '1');
+if (PAID) { const el = document.getElementById('paid'); el.textContent = `Payment received for ${PAID}. We'll check your order and email you within 1 working day.`; el.scrollIntoView({ block: 'start' }); }
 const usd = n => '$' + Math.round(n).toLocaleString('en-US');
 const usd2 = n => '$' + n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 const fill = (sel, obj) => { sel.innerHTML = Object.entries(obj).map(([k,v]) => `<option value="${k}">${v.label}</option>`).join(''); };
@@ -711,7 +714,7 @@ function needNote(){
   el.hidden = !f;
 }
 // Phones: a bar pinned to the bottom shows the total while the form is on screen and the price box isn't.
-function render(){ draw(); needNote(); $('#pay').hidden = $('#payterms').hidden = !payUsd(); $('#barlb').textContent = $('#estlb').textContent; $('#bartot').textContent = $('#tot').textContent; }
+function render(){ draw(); needNote(); const pu = payUsd(); $('#pay').hidden = $('#payterms').hidden = $('#paylink').hidden = !pu; $('#pay').textContent = pu ? `Order and pay ${usd(pu)} by card` : 'Order and pay by card'; $('#barlb').textContent = $('#estlb').textContent; $('#bartot').textContent = $('#tot').textContent; }
 const seen = new Map(), io = new IntersectionObserver(es => {
   es.forEach(e => seen.set(e.target, e.isIntersecting));
   $('#bar').classList.toggle('on', !!seen.get(qf) && !seen.get($('#est')));
