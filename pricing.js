@@ -29,17 +29,17 @@ window.WYSPA_PRICING = {
   //   buying up to a break if that costs less, so a bigger order never pays more for fabric. Breaks = supplier yardage / 1.3 scrap
   //   (10 yd = 9 m², 50 yd = 45 m², 100 yd = 90 m²). 2026-10-13 cycle 22, sources in build_work/research/material-costs.md.
   plies: {
-    carbon:  { label: "Carbon fiber",   gsm: 200, t: 0.22, gsmPerMm: 900,  perM2: 70, density: 1.44,      // 3K 2x2 twill
+    carbon:  { label: "Carbon fiber",   gsm: 200, t: 0.22, gsmPerMm: 900,  perM2: 71, density: 1.44,      // 3K 2x2 twill. 2026-10-15: resin bought = fabric weight (bagged wet layup: Gougeon Epoxyworks mixes 1.22 kg/kg; Fibre Glast "in excess of 100%"), was cured resin x1.5
                fab: 62.8, vol: [[45, 0.82]],                  // Fibre Glast $56.18/yd (10 yd cut) -> Rock West 50 yd roll $45.96/yd
-               bulk: { gsm: 670, t: 0.75, perM2mm: 165,       // heavy 12K twill for the inside of thick laminates, $ per m² per mm
+               bulk: { gsm: 670, t: 0.75, perM2mm: 168,       // heavy 12K twill for the inside of thick laminates, $ per m² per mm
                        fabPerMm: 132, vol: [[45, 0.70]] } },  // Fibre Glast $88/yd (10 yd cut) -> Rock West 50 yd roll $60.68/yd
     prepreg: { label: "Carbon (prepreg)", gsm: 200, t: 0.20, gsmPerMm: 1000, perM2: 137, density: 1.49,      // 3K twill prepreg, ACP $122/yd list x1.3 scrap
                fab: 136.6, vol: [[4.5, 0.90], [9, 0.80], [45, 0.75]] },  // ACP 5-9 yd $109.80, 10-49 yd $97.60, 50+ yd $91.50
-    glass:   { label: "Fiberglass",     gsm: 300, t: 0.26, gsmPerMm: 1140, perM2: 28, density: 1.74,       // 7781 E-glass
+    glass:   { label: "Fiberglass",     gsm: 300, t: 0.26, gsmPerMm: 1140, perM2: 30, density: 1.74,       // 7781 E-glass
                fab: 17.7, vol: [[9, 0.87], [90, 0.83]],       // Fibre Glast $15.86/yd -> Aircraft Spruce $13.65/yd; Rock West 100 yd roll $13.09/yd
                cureGsm: 4500,                                 // glass wet layup per cure (~4 mm): West System lays full skins in one cure; Scott Bader 3 mm/operation polyester scaled to epoxy ~5 mm, x0.8 (judgment)
                layHrPerM2Ply: 0.6 },                          // molded wet layup per m² per ply (glass only): timed hand lay-up 0.35 flat incl. cutting, ~0.56 on shaped tools (Skramstad, MSU 1999); x1.7 for a curved mold (judgment). build_work/research/pricing/molded-wetlayup-2026-10-13.md
-    hybrid:  { label: "Carbon + glass", gsm: 250, t: 0.24, gsmPerMm: 1040, perM2: 49, density: 1.60,       // average of one carbon + one 7781 ply
+    hybrid:  { label: "Carbon + glass", gsm: 250, t: 0.24, gsmPerMm: 1040, perM2: 51, density: 1.60,       // average of one carbon + one 7781 ply
                mix: ["carbon", "glass"] },                    // half the area on each fabric's volume prices
   },
   consumablesPerM2: 20,       // peel ply, bag, breather, release, per m² of part per cure: the floor
