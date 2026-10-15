@@ -337,11 +337,18 @@ function calc(){
     const L = val('pL'), W = val('pW'), T = val('pT'), holes = Math.max(0, Math.round(val('pHoles') || 0)), m = P.plies[val('pMat')], cored = val('pCore') === 'core', f = P.panel.finish[val('pFin')], C = P.panel;
     // Core = total minus both skins.
     const skin = cored ? (val('pSkin') || 0) : 0, coreT = cored ? T - 2 * skin : 0;
-    // Plies for one laminate: light face plies outside, heavy bulk fabric inside (whole plies, never less than the thickness needed); cheaper option wins
-    const lam = (tl, faces) => { const b = m.bulk, k = Math.max(1, Math.round(tl / m.t)), A = { n: k, f: k, nb: 0, bmm: 0, cost: k * m.perM2 };
-      if (!b || tl <= faces * m.t) return A;
-      const bt = tl - faces * m.t, nb = Math.max(1, Math.round(bt / b.t)), B = { n: faces + nb, f: faces, nb, bmm: Math.max(bt, nb * b.t), cost: faces * m.perM2 + Math.max(bt, nb * b.t) * b.perM2mm };
-      return B.cost < A.cost ? B : A; };
+    // Plies for one laminate (B1, 2026-10-15): every whole-ply mix of light 3K plies and heavy 12K bulk plies (12K inside, at least
+    // `faces` 3K plies outside). Mixes that build within plyTolMm of the typed thickness qualify; the cheapest of those (fabric x2 +
+    // layup hours) wins. None within it: the nearest build, thicker on a tie. 3K alone is always within half a 3K ply (0.11 mm).
+    // Was: 12K rounded to the nearest whole 0.75 mm ply, so a typed 1.5 mm built 1.19 mm (research/pricing/panel-properties.md).
+    const lam = (tl, faces) => { const b = m.bulk, tol = (C.plyTolMm || 0.1) + 1e-6, hp = C.hrPerM2Ply * P.rate;
+      if (!b || !(tl > 0)) { const k = Math.max(1, Math.round(tl / m.t)); return { n: k, f: k, nb: 0, bmm: 0, mm: k * m.t, cost: k * m.perM2 }; }
+      let best = null;
+      for (let nb = 0; nb * b.t <= tl + tol; nb++) for (const f of new Set([Math.floor, Math.ceil].map(r => Math.max(nb ? faces : 1, r((tl - nb * b.t) / m.t))))) {
+        const mm = f * m.t + nb * b.t, err = Math.abs(mm - tl), cost = f * m.perM2 + nb * b.t * b.perM2mm, x = { n: f + nb, f, nb, bmm: nb * b.t, mm, cost, err, ok: err <= tol, s: 2 * cost + (f + nb) * hp };
+        if (!best || (x.ok && !best.ok) || (x.ok && best.ok && x.s < best.s) || (!x.ok && !best.ok && (x.err < best.err - 1e-6 || (x.err < best.err + 1e-6 && mm > best.mm)))) best = x;
+      }
+      return best; };
     const lm1 = cored ? lam(skin, 1) : lam(T, 2), k = cored ? 2 : 1;
     // B133: sizes within 5% of the file's (a retyped 300 -> 300.5) keep the file's cut length and hole edges, scaled to the
     // new size. A bigger change is a different part: priced as a rectangle with the holes in the field, and the page says so.
@@ -360,7 +367,7 @@ function calc(){
     mat = a * (lamCost + f.perM2 + (cored ? coreM2(coreT) : 0));
     const cutM = fsc ? Math.max(fileGeo.cutM * fsc, 2 * (L + W) / 1000) : 2 * (L + W) / 1000;
     if (fileGeo && !fsc && pricedFile && L > 0 && W > 0) warn.push(`Priced as a plain rectangle with ${holes} ${holes === 1 ? 'hole or cutout' : 'holes or cutouts'}. The sizes you typed differ from your file by more than 5%. To price your file's exact shape, match the sizes to the file.`);
-    kg = a * (cored ? 2 * skin * m.density + Math.max(coreT, 0) * C.core.density / 1000 + C.core.bondKgM2 : T * m.density);
+    kg = a * (cored ? 2 * lm1.mm * m.density + Math.max(coreT, 0) * C.core.density / 1000 + C.core.bondKgM2 : lm1.mm * m.density);   // B1: built plies, not the typed thickness
     cut = holes > 0 || cutM > 2.1 * (set ? set.reduce((t, p) => t + p[0] + p[1], 0) : L + W) / 1000;   // the weight is for the full rectangle(s)
     // B132: a DXF's hole edges are already in cutM, and hrPerHole is the time for a whole hole including its edge, so each
     // DXF hole pays the larger of the two, not both. Typed holes and STEP holes (no edge lengths) keep hrPerHole each.
@@ -389,7 +396,9 @@ function calc(){
     if (cored && coreT > X.maxCoreToSkin * skin) review.push('Thin outer layers on a thick core');
     // B115: no gsm (layup) in a review email; the engineer works it out.
     const rv = review.length > 0;
-    spec.push(`${set ? `Set of ${nP} flat panels from one file (${set.map(p => p.map(Math.round).join(' × ')).join(', ')} mm), ${T} mm` : `Flat panel ${L} × ${W} × ${T} mm`} total, ${m.label}, ${cored ? `${skin} mm skins${rv ? '' : ` (about ${Math.round(skin * m.gsmPerMm)} gsm each)`}${coreT > 0 ? ` on ${+coreT.toFixed(1)} mm foam core` : ''}` : `solid${rv ? '' : ` (about ${Math.round(T * m.gsmPerMm)} gsm)`}`}, ${f.label}, ${holeTxt(holes, fsc && fileGeo.holes === holes ? fileGeo.round : null)}, ${cutM.toFixed(1)} m of cutting${set ? ' per set' : ''}`);
+    // B1: the stack we build, when it differs from the typed thickness by 0.05 mm or more; fabric gsm of the plies used.
+    const bTxt = Math.abs(lm1.mm - (cored ? skin : T)) >= 0.05 ? `builds ${+lm1.mm.toFixed(2)} mm, ` : '', gsmB = Math.round(lm1.f * m.gsm + lm1.nb * (m.bulk ? m.bulk.gsm : 0));
+    spec.push(`${set ? `Set of ${nP} flat panels from one file (${set.map(p => p.map(Math.round).join(' × ')).join(', ')} mm), ${T} mm` : `Flat panel ${L} × ${W} × ${T} mm`} total, ${m.label}, ${cored ? `${skin} mm skins${rv ? '' : ` (${bTxt}about ${gsmB} gsm each)`}${coreT > 0 ? ` on ${+coreT.toFixed(1)} mm foam core` : ''}` : `solid${rv ? '' : ` (${bTxt}about ${gsmB} gsm)`}`}, ${f.label}, ${holeTxt(holes, fsc && fileGeo.holes === holes ? fileGeo.round : null)}, ${cutM.toFixed(1)} m of cutting${set ? ' per set' : ''}`);
     sets = nP;
   } else if (kind === 'rotor') {
     const D = val('rD'), B = val('rB'), m = P.plies[val('rMat')], geo = val('rGeo'), R = P.rotor, bm = R.bladeMult[B];
