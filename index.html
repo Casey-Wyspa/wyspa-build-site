@@ -399,7 +399,10 @@ function calc(){
     const hQ = (inchIn('mL') || inchIn('mW') || sL || sW) && size(hEl).bare && hEl.value !== hEl.dataset.f && H > 0 && H <= 60;   // B118; over 60 can't be inches here (B36 range)
     // B52: until the buyer picks a shape, pick Open or Deep from the sizes (same rule as for files). Not while a unit is in doubt (B130).
     if (!cx.dataset.t && cx.value !== 'complex' && Math.min(L, W) > 0 && !sL && !sW && !hQ) cx.value = H / Math.min(L, W) <= 0.5 ? 'simple' : 'medium';   // B90: depth = half the width is Open
-    const m = P.plies[val('mMat')], c = P.molded.complexity[cx.value], M = P.molded;
+    // B157: Open picked for a part deeper than half its width: price it as Deep (the same rule as the auto pick) and say so.
+    const tooDeep = cx.value === 'simple' && Math.min(L, W) > 0 && H / Math.min(L, W) > 0.5;
+    if (tooDeep) warn.push('Depth is over half the width, so we priced it as Deep.');
+    const m = P.plies[val('mMat')], c = P.molded.complexity[tooDeep ? 'medium' : cx.value], M = P.molded;
     // Wall thickness in mm -> whole plies of the chosen fabric, rounded up
     const wall = val('mWall') || 1, n = Math.max(1, Math.ceil(wall / m.t - 1e-9));
     const fromFile = fileSurf && fileSurf.L === L && fileSurf.W === W && fileSurf.H === H; let a = fromFile ? fileSurf.m2 : (L * W + 2 * H * (L + W)) / 1e6;   // B68: the file's own surface while its sizes are unchanged
@@ -436,6 +439,7 @@ function calc(){
       if (val('mCx') === 'complex') review.push('Closed or split mold, undercuts');
       if (Math.max(L, W) > X.moldedMaxDim) review.push(`Longer than ${X.moldedMaxDim} mm`);
       if (H > X.moldedMaxDepth) review.push(`Deeper than ${X.moldedMaxDepth} mm`);
+      else if (X.moldedTubeRatio && val('mCx') !== 'complex' && Math.max(L, W) > X.moldedTubeRatio * Math.min(L, W) && H >= X.moldedTubeDepth * Math.min(L, W)) review.push('Long thin tube or rod');   // B157
       else if (X.moldedMaxDepthRatio && val('mCx') !== 'complex' && H > X.moldedMaxDepthRatio * Math.min(L, W)) review.push('The part is deeper than it is wide');   // 2026-10-13: deep narrow parts need a split or closed mold
       if (n > X.maxPlies) review.push(`Wall thicker than ${+(X.maxPlies * m.t).toFixed(1)} mm`);
       // Weight check (internal): labor hours per kg far from the big-part reference means the layup is unusual for its size.
@@ -463,7 +467,7 @@ function calc(){
   if (LQ && lead) {
     const d = Math.max(hr * q / LQ.hrPerDay, cycles && LQ.cyclesPerDay[kind] ? q * cycles / (LQ.cyclesPerDay[kind] * molds) : 0), x = Math.ceil(Math.max(0, d - LQ.daysInBase) - 1e-9) + copyDays;
     lead = [lead[0] + x, lead[1] + x];
-    if (X.maxLeadDays && lead[1] > X.maxLeadDays) review.push('Order too large for an instant ready date');
+    if (X.maxLeadDays && lead[1] > X.maxLeadDays) review.push("Too many parts for an instant ready date. We'll plan it and reply with a date.");   // B163: labor-bound orders past maxLeadDays (extra molds don't help)
   }
   // Part weight: one short line on the page and in the email. Under 0.1 kg in grams.
   const wt = kg > 0 && isFinite(kg) ? `About ${kg < 0.1 ? `${Math.max(1, Math.round(kg * 1000))} g` : `${kg < 1 ? kg.toFixed(2) : kg < 10 ? kg.toFixed(1) : Math.round(kg)} kg`} ${sets > 1 ? 'per set' : 'each'}${cut ? ' before cutouts' : ''}.` : '';
@@ -664,11 +668,11 @@ function needFit(){
   const v = $('#sf').elements.need.value;
   if (!v || badSize || needSize || !last || last.units || !last.lead || !last.lead.every(isFinite)) return '';
   const [y, m, dd] = v.split('-').map(Number), need = new Date(y, m - 1, dd), [a, b] = readyDates(orderLead());
-  return need < a ? 'sooner' : need < b ? 'tight' : '';
+  return need < a ? 'sooner' : need < b ? 'tight' : last.manual && !combo() ? '' : 'ok';   // B161: 'ok' = the date fits an instant price (custom quotes say nothing)
 }
 function needNote(){
   const f = needFit(), el = $('#needmsg');
-  el.textContent = f === 'sooner' ? "That's sooner than we can usually make it. Add a note and we'll ask the shop." : f === 'tight' ? "That's tight. We'll check with the shop." : '';
+  el.textContent = f === 'sooner' ? "That's sooner than we can usually make it. Add a note and we'll ask the shop." : f === 'tight' ? "That's tight. We'll check with the shop." : f === 'ok' ? `That works: ready about ${readyRange(orderLead())}.` : '';
   el.hidden = !f;
 }
 // Phones: a bar pinned to the bottom shows the total while the form is on screen and the price box isn't.
@@ -716,7 +720,7 @@ function draw(){
     $('#estlb').textContent = 'Quote'; $('#tot').textContent = 'Custom quote'; $('#tot').style.fontSize = 'clamp(30px,4vw,40px)';
     $('#per').textContent = kind === 'assembly' ? 'Send it with your files. We reply with a price.' : 'We need to look at this one. Send it and we reply with a price.';
     $('#lines').innerHTML = '';
-    $('#warn').innerHTML = kind === 'assembly' ? '' : `<div>Why: ${last.review.join(' · ')}</div>${kind === 'rotor' ? `\n<div>${rotorNote()}</div>` : ''}`;
+    $('#warn').innerHTML = kind === 'assembly' ? '' : `<div>Why: ${last.review.join(' · ')}</div>${last.review.includes('Small, thick molded part') ? '\n<div>Could it be flat plates bonded together? Try the Flat panel tab.</div>' : ''}${kind === 'rotor' ? `\n<div>${rotorNote()}</div>` : ''}`;
     return;
   }
   // B48: several CAD files, one priced. Say so in the label, not just a note.

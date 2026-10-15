@@ -108,6 +108,7 @@ window.WYSPA_PRICING = {
     moldedMaxDim: 1500,       // mm, longest side
     moldedMaxDepth: 400,      // mm
     moldedMaxDepthRatio: 1.0, // depth over the shorter side; deeper parts need a split mold (closed-tool evidence, 2026-10-13)
+    moldedTubeRatio: 20, moldedTubeDepth: 0.75,   // B157: length over 20x the width with depth at least 0.75x the width is a tube or rod (closed mold, mandrel or stock tube): priced by hand
     maxPlies: 20,
     moldedHrPerKg: [3, 12],   // molded labor hours per kg of part outside this goes to engineer review. Big-part aerospace plan: 4.1-6.2 h/kg (wing 6.4-9.6)
     moldedHrPerKgGlass: [1.5, 12],  // glass wet layup runs ~2-3.5 h/kg at the glass layup rate; a timed flat glass part took ~0.6 h/kg (Skramstad 1999). Judgment floor
