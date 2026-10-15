@@ -295,8 +295,28 @@
       for (let j = 0; j < 3; j++) { const e = [k[j], k[(j + 1) % 3]].sort().join('|'), o = edges.get(e); if (o) o.n++; else edges.set(e, { n: 1, p: i + 3 * j, r: i + 3 * ((j + 1) % 3) }); }
     }
     let openLen = 0;   // total length of edges used once (holes in the mesh)
-    for (const o of edges.values()) if (o.n === 1) openLen += Math.hypot(t[o.p] - t[o.r], t[o.p + 1] - t[o.r + 1], t[o.p + 2] - t[o.r + 2]);
+    const oe = [...edges.values()].filter(o => o.n === 1), pt = i => [t[i], t[i + 1], t[i + 2]];
+    for (const o of oe) openLen += Math.hypot(t[o.p] - t[o.r], t[o.p + 1] - t[o.r + 1], t[o.p + 2] - t[o.r + 2]);
     const open = openLen > 0;
+    // B164: a shell with open ends (a tube exported without its end rings) is missing the rings' share of the volume, so its
+    // wall read low (1 mm for 1.5). Close each open loop with a fan to its own centre and add that volume. Only when the patches
+    // are small next to the part (under 10% of its surface); a loose open surface or a mesh in pieces keeps its old reading.
+    if (open) {
+      const par = new Map(), find = k => { while (par.get(k) !== k) { par.set(k, par.get(par.get(k))); k = par.get(k); } return k; }, add = k => { if (!par.has(k)) par.set(k, k); return k; };
+      oe.forEach(o => par.set(find(add(key(o.p))), find(add(key(o.r)))));
+      const cen = new Map();
+      for (const o of oe) { const r = find(key(o.p)), c = cen.get(r) || [0, 0, 0, 0], l = Math.hypot(t[o.p] - t[o.r], t[o.p + 1] - t[o.r + 1], t[o.p + 2] - t[o.r + 2]);
+        for (let j = 0; j < 3; j++) c[j] += (t[o.p + j] + t[o.r + j]) / 2 * l; c[3] += l; cen.set(r, c); }
+      let cv = 0, ca = 0;
+      for (const o of oe) {
+        const c = cen.get(find(key(o.p))); if (!(c[3] > 0)) continue;
+        const C = [c[0] / c[3], c[1] / c[3], c[2] / c[3]], R = pt(o.r), Q = pt(o.p);   // cap triangle C, R, Q runs the open edge backwards
+        cv += (C[0] * (R[1] * Q[2] - R[2] * Q[1]) - C[1] * (R[0] * Q[2] - R[2] * Q[0]) + C[2] * (R[0] * Q[1] - R[1] * Q[0])) / 6;
+        const u = R.map((v, j) => v - C[j]), w = Q.map((v, j) => v - C[j]);
+        ca += Math.hypot(u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]) / 2;
+      }
+      if (ca < 0.1 * area) vol += cv;
+    }
     vol = Math.abs(vol);
     // B104: an open surface (a Rhino cover exported as a surface) has no volume or wall; its "volume" depends on where the origin is.
     // Tested by shape, not shared edges, since STEP faces are meshed apart even on a closed solid.
