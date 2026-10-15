@@ -48,7 +48,11 @@ window.WYSPA_PRICING = {
   // Flat panels: laid up flat, cured, CNC cut
   panel: {
     materials: ["carbon", "prepreg", "glass", "hybrid"],
-    core: { label: "Foam core", perM2mm: 7, hrPerM2: 0.4, minT: 3, density: 80, bondKgM2: 0.3 },  // core $ per m² per mm; thinnest stock foam is 1/8 in (3.2 mm); H80 foam 80 kg/m³ plus about 0.3 kg/m² bond resin (laminate engine)
+    // Foam core is bought as stock sheets: [sheet mm, $ per m² of part]. H80 foam 48 x 96 in list price x 1.3 scrap, rounded up (dealer list prices checked 2026-10-15).
+    // A core is charged as the first sheet at least as thick; over 31.75 mm, the cheapest two sheets plus one bond line (bondM2). Thinnest stock is 1/8 in (3.2 mm).
+    // H80 foam 80 kg/m³ plus about 0.3 kg/m² bond resin (laminate engine); weight uses the core thickness itself.
+    core: { label: "Foam core", stock: [[3.175, 36], [6.35, 54], [9.525, 77], [12.7, 95], [15.875, 110], [19.05, 133], [25.4, 165], [31.75, 201]], bondM2: 12,
+            hrPerM2: 0.4, minT: 3, density: 80, bondKgM2: 0.3 },
     finish: {
       matte: { label: "Matte", perM2: 0,  hrPerM2: 0 },
       gloss: { label: "Gloss one side",   perM2: 15, hrPerM2: 0.6 },

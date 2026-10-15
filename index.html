@@ -344,7 +344,10 @@ function calc(){
     const aF = a * k * lm1.f * q, aB = a * k * lm1.nb * q, b = m.bulk;
     const lamCost = k * (lm1.f * plyM2(val('pMat'), aF) + (lm1.bmm ? lm1.bmm * (b.perM2mm - (b.fabPerMm || 0) * (1 - vm(b.vol, aB))) : 0));
     fabA = aF + aB; fabSave = a * (k * lm1.cost - lamCost);
-    mat = a * (lamCost + f.perM2 + (cored ? C.core.perM2mm * Math.max(coreT, 0) : 0));
+    // Core $/m² = the stock sheet it is cut from (0.05 mm absorbs inch rounding); thicker than the thickest sheet = cheapest two sheets + a bond line.
+    const coreM2 = t => { if (!(t > 0)) return 0; const S = C.core.stock, one = S.find(s => s[0] >= t - 0.05); if (one) return one[1];
+      let best = Infinity; for (const x of S) for (const y of S) if (x[0] + y[0] >= t - 0.05) best = Math.min(best, x[1] + y[1]); return best + C.core.bondM2; };
+    mat = a * (lamCost + f.perM2 + (cored ? coreM2(coreT) : 0));
     const cutM = fsc ? Math.max(fileGeo.cutM * fsc, 2 * (L + W) / 1000) : 2 * (L + W) / 1000;
     if (fileGeo && !fsc && pricedFile && L > 0 && W > 0) warn.push(`Priced as a plain rectangle with ${holes} ${holes === 1 ? 'hole or cutout' : 'holes or cutouts'}. The sizes you typed differ from your file by more than 5%. To price your file's exact shape, match the sizes to the file.`);
     kg = a * (cored ? 2 * skin * m.density + Math.max(coreT, 0) * C.core.density / 1000 + C.core.bondKgM2 : T * m.density);
