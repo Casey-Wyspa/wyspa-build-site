@@ -163,16 +163,25 @@
         units += '; we left out the drawing border, so check the size';
       } else units += '; this may be the drawing sheet, not the part';
     }
-    const [x0, y0, x1, y1] = part.bb, holes = inner.filter(s => s.closed).length - (part.bb === bb ? 1 : 0);
+    // B146: two or more closed loops that sit inside no other closed loop are separate parts nested on one sheet, priced as
+    // a set (each part's holes stay holes). Only when every other shape is inside one of them; a drawing frame never gets here.
+    let set = null;
+    if (part.bb === bb) {
+      const cl = shapes.filter(s => s.closed), top = cl.filter(s => !cl.some(o => inside(s, o)));
+      if (top.length > 1 && shapes.every(s => top.includes(s) || top.some(o => inside(s, o)))) set = top;
+    }
+    const [x0, y0, x1, y1] = part.bb, holes = set ? shapes.filter(s => s.closed).length - set.length : inner.filter(s => s.closed).length - (part.bb === bb ? 1 : 0);
     // B122: round holes (circles, or closed loops as wide as tall with a circle's perimeter) vs other cutouts, for the
     // words only; the price uses the total. When the outline is in the list, the largest closed loop is it.
     const isRound = s => { const w = s.bb[2] - s.bb[0], h = s.bb[3] - s.bb[1]; return s.round || (w > 0 && h > 0 && Math.abs(w / h - 1) < 0.03 && Math.abs(s.len / (Math.PI * (w + h) / 2) - 1) < 0.02); };
-    const loops = inner.filter(s => s.closed);
-    if (part.bb === bb && loops.length) loops.splice(loops.indexOf(loops.reduce((a, s) => area(s) > area(a) ? s : a)), 1);
+    const loops = set ? shapes.filter(s => s.closed && !set.includes(s)) : inner.filter(s => s.closed);
+    if (!set && part.bb === bb && loops.length) loops.splice(loops.indexOf(loops.reduce((a, s) => area(s) > area(a) ? s : a)), 1);
+    // B146: each part's size in mm, long side first, largest part first.
+    const parts = set && set.map(s => [s.bb[2] - s.bb[0], s.bb[3] - s.bb[1]].map(v => v * scale).sort((p, q) => q - p)).sort((p, q) => q[0] * q[1] - p[0] * p[1]);
     const round = Math.min(Math.max(0, holes), loops.filter(isRound).length);
     // B132: each hole's edge length (m), so the page doesn't charge a hole's edge twice (it's already in cutM).
     const holeM = loops.length === Math.max(0, holes) ? loops.map(s => s.len * scale / 1000) : null;
-    return { kind: 'panel', L: (x1 - x0) * scale, W: (y1 - y0) * scale, cutM: part.len * scale / 1000, holes: Math.max(0, holes), round, holeM, units, inch: uc === 1 };
+    return { kind: 'panel', L: (x1 - x0) * scale, W: (y1 - y0) * scale, cutM: part.len * scale / 1000, holes: Math.max(0, holes), round, holeM, parts, units, inch: uc === 1 };
   }
 
   // ---------- 3D meshes ----------
