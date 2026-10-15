@@ -91,7 +91,8 @@ window.WYSPA_PRICING = {
     },
     setupHours: 3,                         // new-mold orders: ply templates, trim fixture, first-part check
     hrPerPart: 2.0, trimHours: 2.0,        // per part: mold prep, bag and cure; trim, sand and drill
-    fixedFullM2: 0.12, fixedMinScale: 0.4, // B90: under 0.12 m² of surface, the per-part and per-extra-cure hours scale with sqrt(area / 0.12) (edge to trim and bag), never under 0.4x (1.6 h). Full 4 h at 0.12 m² and up (D-spigot 0.12 m², foil-wing skin 0.23 m²). research/pricing/b90-small-molded-2026-10-13.md
+    fixedFullM2: 0.12, fixedMinScale: 0.4, // B90: under 0.12 m² of surface, the per-part and per-extra-cure hours scale with sqrt(area / 0.12) (edge to trim and bag), never under 0.4x (1.6 h). Full 4 h at 0.12 m² and up (D-spigot 0.12 m², foil-wing skin 0.23 m²). research/pricing/b90-small-molded-2026-10-13.md. Since c40 this applies to trimHours only.
+    prepFullM2: 0.234,                     // c40: hrPerPart (mold prep, bag, demold) and hrPerCure scale with sqrt(area / 0.234), same 0.4 floor: S8 (foil-wing skin, 0.234 m²) is the job that timed mold prep; S11 (0.12 m²) timed finishing only. research/pricing/small-molded-cover-2026-10-15.md
     hrPerM2: 1.0, hrPerM2Ply: 1.3,         // layup per m² of surface, plus per ply (carbon, prepreg, carbon+glass: X2; glass uses plies.glass.layHrPerM2Ply)
     wetGsmPerCure: 4000,                   // carbon and carbon+glass wet layup in a mold: about 4,000 gsm of dry fabric per cure (20 plies, ~4.4 mm; same resin mass per cure as glass cureGsm; West System, Gurit, PRO-SET, Scott Bader). Was 1,200 from an on-aircraft joint repair spec (B108). Glass uses its own cureGsm. Prepreg: one cure
     hrPerCure: 1.0,                        // each extra cure: re-bag and cure setup (half of hrPerPart), plus hrPerM2 x surface to sand, peel ply and bag again
@@ -105,8 +106,9 @@ window.WYSPA_PRICING = {
   review: {
     panelMaxT: 25,            // mm, solid panels
     panelCoreMaxT: 40,        // mm, foam-core panels (1 in core + skins); research/pricing/cored-limit-proposal-2026-10-12.md
-    rotorMaxD: 40,            // in
-    rotorMaxBlades: 3,
+    rotorMaxD: 32,            // in. QUEST A1 (2026-10-15): 2-blade up to 32 in only, until Wyspa has built and tested a rotor; research/rotors/program.md decision 6
+    rotorMaxBlades: 2,        // 3- and 4-blade: priced by hand (A1)
+    rotorUnitsD: 40,          // in: a bare number over this asks "is it in mm?" (B62)
     moldedMaxDim: 1500,       // mm, longest side
     moldedMaxDepth: 400,      // mm
     moldedMaxDepthRatio: 1.0, // depth over the shorter side; deeper parts need a split mold (closed-tool evidence, 2026-10-13)
