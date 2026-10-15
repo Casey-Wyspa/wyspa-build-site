@@ -114,3 +114,12 @@ function doGet() {
 function out(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
+
+// Run once from the editor as the owner (ai@wyspa.tech) to grant "connect to an external service" for Square.
+function authorizeSquare() {
+  const r = UrlFetchApp.fetch('https://connect.squareup.com/v2/locations', {
+    headers: { Authorization: 'Bearer ' + PropertiesService.getScriptProperties().getProperty('SQUARE_ACCESS_TOKEN') },
+    muteHttpExceptions: true,
+  });
+  Logger.log('Square answered ' + r.getResponseCode());
+}
