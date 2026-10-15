@@ -327,7 +327,7 @@ function calc(){
   const q = Math.max(1, Math.round(val('qty') || 1)), warn = [], spec = [], review = [], lm = qtyMult(q), X = P.review;
   // Consumables: per part labor hour, never less than the per-m² bag materials (2026-10-13).
   const cons = (m2, h) => Math.max(m2 * P.consumablesPerM2, h * (P.consumablesPerHour || 0));
-  let hr = 0, mat = 0, nre = 0, setup = 0, lead, kg = 0, cut = false, cycles = 0, molds = 1, copyDays = 0, sets = 1;   // sets: parts in one set (B146)   // molds, copyDays: B138 extra molds and the days to make them   // cycles: mold cures per part (B116 ready date)   // kg: finished part weight from the laminate (areal weight x area, plus core)
+  let hr = 0, mat = 0, nre = 0, setup = 0, lead, kg = 0, cut = false, cycles = 0, molds = 1, copyDays = 0, sets = 1, thk = '';   // thk: flat panel built thickness + aluminum line (B2)   // sets: parts in one set (B146)   // molds, copyDays: B138 extra molds and the days to make them   // cycles: mold cures per part (B116 ready date)   // kg: finished part weight from the laminate (areal weight x area, plus core)
   // Fabric volume prices by order size (2026-10-13): price factor for A m² of one fabric in the whole order. The cheapest break wins,
   // buying up to it if that costs less, so ordering more never raises the fabric bill. Resin, core and consumables keep list prices.
   const vm = (v, A) => A > 0 && v ? Math.min(1, ...v.map(([t, k]) => Math.max(A, t) * k / A)) : 1;
@@ -368,6 +368,13 @@ function calc(){
     const cutM = fsc ? Math.max(fileGeo.cutM * fsc, 2 * (L + W) / 1000) : 2 * (L + W) / 1000;
     if (fileGeo && !fsc && pricedFile && L > 0 && W > 0) warn.push(`Priced as a plain rectangle with ${holes} ${holes === 1 ? 'hole or cutout' : 'holes or cutouts'}. The sizes you typed differ from your file by more than 5%. To price your file's exact shape, match the sizes to the file.`);
     kg = a * (cored ? 2 * lm1.mm * m.density + Math.max(coreT, 0) * C.core.density / 1000 + C.core.bondKgM2 : lm1.mm * m.density);   // B1: built plies, not the typed thickness
+    // B2: built thickness, and the 6061 plate with the same bending stiffness (EI per width), shown only when 20%+ lighter.
+    // Laminate bending E, GPa (research/pricing/panel-properties.md; carbon + glass solid 43 from its 2 mm D11, as a skin 36).
+    const Eb = { carbon: [56.6, 56.6], prepreg: [62.1, 62.1], glass: [17.8, 17.8], hybrid: [43, 36] }[val('pMat')], kgM2 = a > 0 ? kg / a : 0;
+    const tB = cored ? Math.max(coreT, 0) + 2 * lm1.mm : lm1.mm;
+    const tAl = !Eb ? 0 : cored ? Math.cbrt(12 * Eb[1] * lm1.mm * (Math.max(coreT, 0) + lm1.mm) ** 2 / 2 / 68.9) : lm1.mm * Math.cbrt(Eb[0] / 68.9), lt = tAl > 0 ? 1 - kgM2 / (tAl * 2.7) : 0;
+    const ta = tAl.toFixed(1);
+    thk = tB > 0 && isFinite(tB) ? `, ${tB < 1 ? tB.toFixed(2) : tB.toFixed(1)} mm thick.${lt >= 0.2 ? ` As stiff as a${/^(8|11\.|18\.)/.test(ta) ? 'n' : ''} ${ta} mm aluminum plate, ${Math.round(lt * 100)}% lighter.` : ''}` : '';   // wording plain-edited c41: "Calculated:" label goes in front (wt)
     cut = holes > 0 || cutM > 2.1 * (set ? set.reduce((t, p) => t + p[0] + p[1], 0) : L + W) / 1000;   // the weight is for the full rectangle(s)
     // B132: a DXF's hole edges are already in cutM, and hrPerHole is the time for a whole hole including its edge, so each
     // DXF hole pays the larger of the two, not both. Typed holes and STEP holes (no edge lengths) keep hrPerHole each.
@@ -495,12 +502,12 @@ function calc(){
     if (X.maxLeadDays && lead[1] > X.maxLeadDays) review.push("Too many parts for an instant ready date. We'll plan it and reply with a date.");   // B163: labor-bound orders past maxLeadDays (extra molds don't help)
   }
   // Part weight: one short line on the page and in the email. Under 0.1 kg in grams.
-  const wt = kg > 0 && isFinite(kg) ? `About ${kg < 0.1 ? `${Math.max(1, Math.round(kg * 1000))} g` : `${kg < 1 ? kg.toFixed(2) : kg < 10 ? kg.toFixed(1) : Math.round(kg)} kg`} ${sets > 1 ? 'per set' : 'each'}${cut ? ' before cutouts' : ''}.` : '';
+  const wt = kg > 0 && isFinite(kg) ? `${thk ? 'Calculated: about' : 'About'} ${kg < 0.1 ? `${Math.max(1, Math.round(kg * 1000))} g` : `${kg < 1 ? kg.toFixed(2) : kg < 10 ? kg.toFixed(1) : Math.round(kg)} kg`} ${sets > 1 ? 'per set' : 'each'}${cut ? ' before cutouts' : ''}${thk || '.'}` : '';   // B2: flat panels add the built thickness and the aluminum line
   // B115: a part sent to review gets no weight, ply or fabric numbers (they came out as "38 kg each" for an unconfirmed size).
   // B115 also for reasons found after the spec line was written (order too large for an instant ready date): drop the gsm and plies.
   if (review.length) { spec[0] = spec[0].replace(/ \(about \d+ gsm(?: each)?\)| \(\d+ pl(?:y|ies)\)/g, ''); if (kind !== 'assembly') spec.push("Weight and layup: we'll work these out with your price."); }
   else {
-    if (wt) spec.push(`Weight: ${wt.toLowerCase().slice(0, -1)}`);
+    if (wt) spec.push(thk ? `Weight (calculated): ${wt.slice(12, -1)}` : `Weight: ${wt[0].toLowerCase()}${wt.slice(1, -1)}`);   // 12 = 'Calculated: '.length
     if (fabSave > 0.005) spec.push(`Fabric at volume prices: about ${Math.round(fabA)} m² for this order`);
   }
   // B130: any open units question comes first ("Check your sizes"); the other reasons may only come from the misread size.
