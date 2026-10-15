@@ -61,7 +61,7 @@ window.WYSPA_PRICING = {
     },
     hrPerM2Ply: 0.042,        // layup per m² per ply: NREL flat shear-web rate, 24 m²/h/person (blade cost model, WISDEM blade_cost.py). Was 0.08 until 2026-10-13
     bagHrPerM2: 0.36,         // per m² of sheet, one cure: tool prep, peel ply, breather, bag, pull, debag (same NREL model). build_work/research/pricing/panel-bag-and-cures-2026-10-13.md
-    hrPerPart: 0.2,           // demold, inspect, handle
+    hrPerPart: 0.1,           // per cut part: lift off, tabs/edges by hand, check, bag. Sourced 2.5-6 min (Boothroyd handling, ARKU + Sawmill Creek deburr, WOODWEB sheet change); 0.1 = top of range. Was 0.2 (judgment) until 2026-10-15. build_work/research/pricing/small-flat-hours-2026-10-15.md
     hrPerMCut: 0.09,          // per meter of cut edge: CNC rough + finish pass 0.052 h/m (Amana CFRP chart, 1/4 in bit 23 + 28 in/min, one pass to 6.35 mm)
                               //   + hand edge trim/deburr 0.033 h/m (NREL blade cost model, shear-web trim 30 m/h/person); build_work/research/pricing/panel-hours-2026-10-13.md
     hrPerHole: 0.02,
