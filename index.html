@@ -500,7 +500,8 @@ const rvw = new Map();
 const combo = () => { const fl = cadNames().filter(n => est.has(n)); if (!last.only || fl.length < 2 || !fl.includes(pricedFile)) return null;
   return { t: fl.reduce((s, n) => s + est.get(n).sub, 0) - (fl.length - 1) * Math.round(price(P.reviewHours, 0)), txt: fl.map(n => `${n} × ${est.get(n).q}`).join(', '),
     lead: [0, 1].map(i => Math.max(...fl.map(n => est.get(n).lead[i]))) }; };   // B100: the order is ready when its slowest part is
-const comboLine = C => `All your files: about ${usd(C.t)} (${C.txt}).`;
+// B140: the one review, and a test for its line, so per-file subtotals can leave it out when it's charged once for the order.
+const rvwUsd = () => Math.round(price(P.reviewHours, 0)), noRvw = l => !/^Engineer review/.test(l[0]);
 // B99: each tab remembers the last file priced on it, and each file keeps what was read from it (mesh surface, cut length,
 // solid, unit guess, file message). Clicking a tab brings that file back with its own fields and quantity, not the last file's.
 const tabFile = {}, fileCtx = new Map();
@@ -680,14 +681,15 @@ function draw(){
     return;
   }
   // B100: with 2+ priced files the big number is the order total, ready when its slowest part is; this file's price is the small line.
-  const C = combo(), each = usd(last.total / last.q);
+  // B140: with 2+ priced files each file's subtotal leaves out the engineer review; it's added once for the order (same as the email).
+  const C = combo(), R = C ? rvwUsd() : 0, each = usd((last.total - R) / last.q);
   if (C) $('#estlb').textContent = 'Estimate for all your files';
   $('#tot').textContent = usd(C ? Math.max(C.t, P.minOrder) : last.total);   // the minimum is per order, so that's what 2+ files below it cost
-  // B126: the per-file totals, minus the reviews shared across files, add up to the big number.
-  const fl = C && cadNames().filter(n => est.has(n)), off = C && fl.reduce((s, n) => s + est.get(n).sub, 0) - C.t;
-  $('#per').textContent = C ? `${fl.map(n => `${n} × ${est.get(n).q}: ${usd(est.get(n).sub)}${n === pricedFile ? ` (${each} each)` : ''}`).join(' + ')}${off > 0.5 ? ` − ${usd(off)} (one engineer review for the whole order)` : ''} · All ready about ${readyRange(C.lead)} if you approve today`
+  // B126: the per-file subtotals plus one review add up to the big number.
+  const fl = C && cadNames().filter(n => est.has(n));
+  $('#per').textContent = C ? `${fl.map(n => `${n} × ${est.get(n).q}: ${usd(est.get(n).sub - R)}`).join(' + ')} + ${usd(R)} engineer review (once per order)${C.t < P.minOrder ? ` + ${usd(P.minOrder - C.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(C.lead)} if you approve today`
     : `${each} each, all in · Ready about ${readyRange()} if you approve today${last.only ? '. We\'ll send one price for all your files. The review and minimum apply once.' : ''}`;
-  $('#lines').innerHTML = last.lines.map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${last.only ? `Total for ${last.only}` : 'Total'}</td><td class="n">${usd(last.total)}</td></tr>`;
+  $('#lines').innerHTML = (C ? last.lines.filter(noRvw) : last.lines).map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${C ? `Subtotal for ${last.only}` : last.only ? `Total for ${last.only}` : 'Total'}</td><td class="n">${usd(last.total - R)}</td></tr>`;
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
   const typed = !$('#sf').elements.files.files.length, noFile = kind === 'panel' && typed, holes = parseFloat(qf.elements.pHoles.value) > 0;
@@ -738,7 +740,8 @@ qf.elements.pCore.addEventListener('change', e => {
 });
 
 function summary(){
-  const s = $('#sf').elements;
+  // B140: with 2+ priced files (C), file blocks leave the review out; it's listed once in the order section at the end.
+  const s = $('#sf').elements, C = !badSize && !last.manual && !needSize && combo(), R = C ? rvwUsd() : 0;
   return [
     `Wyspa Build ${last.manual ? 'review' : 'quote'} request ${qid}`, '',
     ...last.spec.map(l => l.replace(/NaN/g, '?')), `Quantity: ${last.q}`, ...(kind === 'rotor' ? [ROTOR_NOTE] : []),   // blank sizes (B49 sketch) read "?", not NaN
@@ -748,16 +751,20 @@ function summary(){
     ...(unitEl && !unitEl.closest('fieldset').hidden && unitEl.value === unitEl.dataset.f ? [`Size: ${pricedFile} has no units, so we assumed ${unitAs}.`] : []),
     ...(kind === 'panel' && pricedFile && qf.elements.pT.dataset.d === qf.elements.pT.value ? [`Thickness: not in ${pricedFile}, so we used ${size(qf.elements.pT).v} mm.`] : []), '',
     ...(badSize ? ['No estimate: a size or quantity was empty or too small.'] : last.manual ? [last.units ? `No price yet. Please check these sizes: ${last.review.join(' ')}` : `Needs engineer pricing: ${last.review.join('; ')}`] : needSize ? ['No estimate: the file could not be read and no size was entered (fields above are defaults).'] : [
-      ...last.lines.map(l => `${l[0]}: ${usd(l[1])}`),
-      `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not a firm quote)${last.only ? `. ${combo() ? `${comboLine(combo())} One engineer review for all files.${combo().t < P.minOrder ? ` Minimum order is ${usd(P.minOrder)} across all files.` : ''}` :'We\'ll send one price for all your files. The review and minimum apply once.'}` : ''}`,
-      combo() ? `All parts ready about ${readyRange(orderLead())} if approved today (${orderLead()[0]}–${orderLead()[1]} working days)`   // B124: one ready line for the order
-        : `Lead time: ${last.lead[0]}–${last.lead[1]} working days after approval (about ${readyRange()} if approved today)`]),
+      ...(C ? last.lines.filter(noRvw) : last.lines).map(l => `${l[0]}: ${usd(l[1])}`),
+      ...(C ? [`Subtotal for ${last.only}: ${usd(last.total - R)}`] : [
+        `Estimate${last.only ? ` for ${last.only} only` : ''}: ${usd(last.total)} (not a firm quote)${last.only ? '. We\'ll send one price for all your files. The review and minimum apply once.' : ''}`,
+        `Lead time: ${last.lead[0]}–${last.lead[1]} working days after approval (about ${readyRange()} if approved today)`])]),
     // B56: one line per other CAD file, with what was read from it.
     ...(() => { const o = cadNames().filter(n => n !== pricedFile);
       // B89: a file priced earlier keeps its spec, quantity and estimate.
       // B135: with every priced line (Parts, Setup, Mold, Review), like the file above, so the order total can be checked.
-      return o.length && cadNames().length > 1 ? ['', ...o.map(n => est.has(n) ? [`${n}: ${est.get(n).spec}. Quantity ${est.get(n).q}.`, ...(est.get(n).lines || []).map(l => `${l[0].replace(/^Engineer review$/, 'Engineer review (once per order)')}: ${usd(l[1])}`), `Estimate for ${n}: ${usd(est.get(n).sub)} (not a firm quote).`].join('\n')
+      return o.length && cadNames().length > 1 ? ['', ...o.map(n => est.has(n) ? [`${n}: ${est.get(n).spec}. Quantity ${est.get(n).q}.`, ...(est.get(n).lines || []).filter(l => !C || noRvw(l)).map(l => `${l[0].replace(/^Engineer review$/, 'Engineer review (once per order)')}: ${usd(l[1])}`), C ? `Subtotal for ${n}: ${usd(est.get(n).sub - R)}` : `Estimate for ${n}: ${usd(est.get(n).sub)} (not a firm quote).`].join('\n')
         : rvw.has(n) ? `${n}: ${rvw.get(n).spec.replace(/NaN/g, '?')}. Quantity ${rvw.get(n).q}. ${rvw.get(n).units ? `No price yet. Check these sizes: ${rvw.get(n).why.join(' ')}` : `An engineer needs to price this: ${rvw.get(n).why.join('; ')}`}`.replace(/\.?$/, '.') : readFiles.get(n) ? `${n}: ${readFiles.get(n)}. Not priced yet; we'll email a price.` : `${n}: couldn't read it; we'll email a price.`)] : []; })(),
+    // B140: the order section. File subtotals + review (+ minimum top-up) = the order estimate.
+    ...(C ? ['', `Order: ${C.txt}`, `Engineer review (once per order): ${usd(R)}`, ...(C.t < P.minOrder ? [`To reach ${usd(P.minOrder)} minimum: ${usd(P.minOrder - C.t)}`] : []),
+      `Order estimate: ${usd(Math.max(C.t, P.minOrder))} (not a firm quote)`,
+      `All parts ready about ${readyRange(C.lead)} if approved today (${C.lead[0]}–${C.lead[1]} working days)`] : []),   // B124: one ready line for the order
     ...(last.warn.length ? ['', 'Notes:', ...last.warn.map(w => '- ' + w)] : []), '',
     `Name: ${s.name.value}`, `Company: ${s.org.value}`, `Email: ${s.email.value}`, `Need by: ${s.need.value || 'flexible'}${({ sooner: ' (before our lead time, check with shop)', tight: ' (tight, check with shop)' })[needFit()] || ''}`,
     `Application and loads: ${s.notes.value}`, '', UPLOAD_URL ? '' : '[Attach CAD / drawings / sketch]'
