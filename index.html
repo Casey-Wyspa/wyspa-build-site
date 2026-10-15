@@ -317,7 +317,9 @@ const inchIn = n => !!size(fs(kind).querySelector(`[name="${n}"]`)).imp;   // B1
 const rotorNote = () => `Price is per rotor, not per pair. All rotors in this quote spin the same way. ${val('rGeo') === 'repeat' ? "Need both directions? Say so in the notes and we'll make sure we have both molds." : "Need the other direction? Say so in the notes. It needs its own mold, which we'll price after we check your part."}`;
 // B112: what "Outer layers" means, under the field while it shows no unit conversion.
 const SKIN_HINT = 'Thickness of each carbon or glass skin on the foam. Set to 1 mm to start. Change it to match your design.';
-const qtyMult = q =>P.qtyBreaks.filter(b => q >= b.min).pop().mult;
+// B178: labor multiplier. Steps at the breaks; with P.qtyCurve 'loglinear', a straight line on log(qty) between breaks, flat past the last.
+const qtyMult = q => { const B = P.qtyBreaks; let i = 0; while (i + 1 < B.length && q >= B[i + 1].min) i++;
+  const a = B[i], b = B[i + 1]; return P.qtyCurve === 'loglinear' && b ? a.mult * (b.mult / a.mult) ** (Math.log(q / a.min) / Math.log(b.min / a.min)) : a.mult; };
 // Pricing method: labor hours x rate + materials x materialMult
 const price = (hours, mat) => hours * P.rate + mat * P.materialMult;
 const cadNames = () => [...$('#sf').elements.files.files].map(f => f.name).filter(n => /\.(dxf|stp|step|igs|iges|stl|3dm)$/i.test(n));
@@ -519,7 +521,7 @@ function calc(){
   // B130: any open units question comes first ("Check your sizes"); the other reasons may only come from the misread size.
   const uq = review.filter(r => unitQ.has(r));
   if (review.length) return { q, manual: true, units: uq.length > 0, review: uq.length ? uq : review, spec, warn: [], lines: [], kg, hr, lead, sets };   // B136: lead kept for the Need-by check
-  // Never charge more than the next quantity break would (labor discount steps at 10/50/250).
+  // Never charge more than the next quantity break would. With qtyCurve 'loglinear' (B178) this can't trigger; kept as a guard for step tables.
   const nb = P.qtyBreaks.find(b => b.min > q), capped = nb && price(hr * qtyMult(nb.min), mat) * nb.min < price(hr * lm, mat) * q;
   if (capped) warn.push(`Same total as ${nb.min} parts.`);
   // Several CAD files attached, but the price is for one (B25).

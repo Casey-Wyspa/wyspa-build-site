@@ -18,6 +18,7 @@ window.WYSPA_PRICING = {
     { min: 50, mult: 0.85 },
     { min: 250, mult: 0.80 },
   ],
+  qtyCurve: "loglinear",      // B178 (2026-10-15): between two breaks the multiplier follows a straight line on log(qty) (a Wright learning curve per segment), flat past the last break. Breaks unchanged; delete this line to go back to steps. build_work/research/pricing/b178-qty-curve-2026-10-15.md
 
   // Raw material cost per m² per ply (fabric + resin), cured ply thickness t in mm, fabric gsm per mm of cured laminate.
   // 2026-10-10: Fibre Glast list prices + epoxy at $39.81/kg (2026-10-15: resin bought = fabric weight, was cured resin x1.5); t from Wyspa laminate engine
