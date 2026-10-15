@@ -426,19 +426,80 @@
     const parent = new Map(), find = k => { while (parent.get(k) !== k) { parent.set(k, parent.get(parent.get(k))); k = parent.get(k); } return k; };
     const q = T / 50, key = (i) => `${Math.round(t[i] / q)},${Math.round(t[i + 1] / q)},${Math.round(t[i + 2] / q)}`;
     let side = 0;
+    const sideAt = [], other = [];   // B192: side-wall triangles, and the rest (faces, floors, cones), for the pocket check below
     for (let i = 0; i + 8 < t.length; i += 9) {
       const ux = t[i + 3] - t[i], uy = t[i + 4] - t[i + 1], uz = t[i + 5] - t[i + 2];
       const vx = t[i + 6] - t[i], vy = t[i + 7] - t[i + 1], vz = t[i + 8] - t[i + 2];
       const n = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx], len = Math.hypot(...n);
-      if (!(len > 0) || Math.abs(n[ax]) > 0.5 * len) continue;   // top and bottom faces
-      side += len / 2;
+      if (!(len > 0)) continue;
+      if (Math.abs(n[ax]) > 0.5 * len) { other.push([i, Math.abs(n[ax]) / len, len / 2]); continue; }   // top and bottom faces
+      side += len / 2; sideAt.push([i, len / 2]);
       const ks = [key(i), key(i + 3), key(i + 6)];
       ks.forEach(k => { if (!parent.has(k)) parent.set(k, k); });
       parent.set(find(ks[1]), find(ks[0])); parent.set(find(ks[2]), find(ks[0]));
     }
     const rings = new Set([...parent.keys()].map(find)).size, cutM = side / T * s / 1000;
     if (!rings || rings > 500 || !isFinite(cutM)) return {};
-    return { holes: rings - 1, cutM };
+    const pk = pockets(t, ax, T, s, q, key, find, sideAt, other);
+    return pk ? { holes: pk.holes, cutM: pk.cutM, pockets: pk.depths } : { holes: rings - 1, cutM };
+  }
+
+  // B192: a pocket, recess or blind hole that doesn't go all the way through is not a hole. Join every face except the plate's
+  // top and bottom into features: a through hole's walls reach both, a blind pocket's walls and floor reach only one. A feature
+  // that reaches both but has a flat floor inside the plate is a counterbore if its rings of wall are square-ish and share one
+  // centre, the widest at most 2.5 times the narrowest (a countersink's cone has no flat floor, so it is a plain through hole);
+  // otherwise it is a pocket with a hole in its floor. A step around the outline (a rabbet, or a raised boss) is a pocket too.
+  // Returns null when there are none, so plates without pockets read exactly as before; else the pocket depths in mm and the
+  // holes and cut length without the pockets (a counterbore stays its 2 rings, as before).
+  function pockets(t, ax, T, s, q, key, find, sideAt, other) {
+    const u = (ax + 1) % 3, v = (ax + 2) % 3;
+    let lo = Infinity, hi = -Infinity, u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+    for (let i = 0; i + 2 < t.length; i += 3) if (isFinite(t[i]) && isFinite(t[i + 1]) && isFinite(t[i + 2])) {
+      lo = Math.min(lo, t[i + ax]); hi = Math.max(hi, t[i + ax]); u0 = Math.min(u0, t[i + u]); u1 = Math.max(u1, t[i + u]); v0 = Math.min(v0, t[i + v]); v1 = Math.max(v1, t[i + v]); }
+    const ce = 0.01 * T, band = 0.05 * T, F = new Map(), ff = k => { if (!F.has(k)) F.set(k, k); while (F.get(k) !== k) { F.set(k, F.get(F.get(k))); k = F.get(k); } return k; };
+    const zs = i => [t[i + ax], t[i + 3 + ax], t[i + 6 + ax]], join = i => { const r = ff(key(i)); F.set(ff(key(i + 3)), r); F.set(ff(key(i + 6)), r); };
+    const cap = z => z.every(w => Math.abs(w - lo) <= ce) || z.every(w => Math.abs(w - hi) <= ce);
+    sideAt.forEach(([i]) => join(i));
+    const flats = [];
+    for (const [i, c, a] of other) {
+      const z = zs(i);
+      if (cap(z)) continue;   // the plate's own top or bottom
+      join(i);
+      // A floor or step: level, and inside the plate (not a fillet running out at the top or bottom).
+      if (c > 0.9999 && Math.max(...z) - Math.min(...z) <= ce && z.every(w => w > lo + band && w < hi - band)) flats.push([i, a, z[0]]);
+    }
+    const fe = new Map(), get = k => { const r = ff(k); if (!fe.has(r)) fe.set(r, { z0: Infinity, z1: -Infinity, fa: 0, f0: Infinity, f1: -Infinity, rings: new Map() }); return fe.get(r); };
+    for (const [i, a] of sideAt) {
+      const f = get(key(i)), r = find(key(i)), z = zs(i);
+      if (!f.rings.has(r)) f.rings.set(r, { a: 0, z0: Infinity, z1: -Infinity, u0: Infinity, u1: -Infinity, v0: Infinity, v1: -Infinity });
+      const g = f.rings.get(r); g.a += a;
+      for (let j = 0; j < 9; j += 3) { g.z0 = Math.min(g.z0, t[i + j + ax]); g.z1 = Math.max(g.z1, t[i + j + ax]); g.u0 = Math.min(g.u0, t[i + j + u]); g.u1 = Math.max(g.u1, t[i + j + u]); g.v0 = Math.min(g.v0, t[i + j + v]); g.v1 = Math.max(g.v1, t[i + j + v]); }
+      f.z0 = Math.min(f.z0, ...z); f.z1 = Math.max(f.z1, ...z);
+    }
+    for (const [i, c] of other) { const z = zs(i); if (cap(z)) continue; const f = get(key(i)); f.z0 = Math.min(f.z0, ...z); f.z1 = Math.max(f.z1, ...z); }
+    for (const [i, a, z] of flats) { const f = get(key(i)); f.fa += a; f.f0 = Math.min(f.f0, z); f.f1 = Math.max(f.f1, z); }
+    const atLo = z => z <= lo + 2 * ce, atHi = z => z >= hi - 2 * ce, per = g => g.a / Math.max(g.z1 - g.z0, q);   // a ring's perimeter
+    const big = f => [...f.rings.values()].reduce((m, g) => !m || per(g) > per(m) ? g : m, null);
+    const all = [...fe.values()], outline = all.reduce((m, f) => f.rings.size && (!m || per(big(f)) > per(big(m))) ? f : m, null);
+    const cbore = f => { const r = [...f.rings.values()], w = g => Math.max(g.u1 - g.u0, g.v1 - g.v0), mid = g => [(g.u0 + g.u1) / 2, (g.v0 + g.v1) / 2];
+      if (!r.length || r.some(g => Math.abs((g.u1 - g.u0) / Math.max(g.v1 - g.v0, q) - 1) > 0.1)) return false;
+      const n = r.reduce((m, g) => w(g) < w(m) ? g : m), x = r.reduce((m, g) => w(g) > w(m) ? g : m);
+      return w(x) <= 2.5 * w(n) && r.every(g => Math.hypot(mid(g)[0] - mid(n)[0], mid(g)[1] - mid(n)[1]) <= q + 0.05 * w(n)); };
+    const depths = [];
+    let holes = 0, cut = 0;
+    for (const f of all) {
+      const rs = [...f.rings.values()], b = big(f), whole = rs.reduce((x, g) => x + g.a, 0) / T;   // whole: wall area / thickness, as before
+      if (f === outline) {
+        if (f.fa >= 0.01 * (u1 - u0) * (v1 - v0)) { depths.push(atLo(b.z0) && !atHi(b.z1) ? hi - f.f0 : f.f1 - lo); cut += per(b); }   // a step or boss: cut the outline only
+        else cut += whole;
+      } else if (!(atLo(f.z0) && atHi(f.z1))) depths.push(atHi(f.z1) ? hi - f.z0 : atLo(f.z0) ? f.z1 - lo : f.z1 - f.z0);   // blind: no hole, no cut
+      else if (f.fa > 0 && b && !cbore(f)) {   // a pocket with holes through its floor: those holes only
+        const top = atHi(b.z1), thru = rs.filter(g => g !== b && (top ? atLo(g.z0) : atHi(g.z1)));
+        depths.push(top ? hi - f.f0 : f.f1 - lo); holes += thru.length; cut += thru.reduce((x, g) => x + per(g), 0);
+      } else { holes += rs.length; cut += whole; }
+    }
+    if (!depths.length) return null;
+    return { depths: depths.map(d => d * s), holes, cutM: cut * s / 1000 };
   }
 
   // ---------- wiring ----------
