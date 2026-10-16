@@ -640,10 +640,10 @@ const blankTab = () => !pricedFile && kind !== 'assembly' && !(kind === 'rotor' 
   && [...fs(kind).querySelectorAll('input')].some(el => SIZES.includes(el.name) && el.name !== 'mH' && !el.closest('[hidden]') && !el.value.trim());
 // c53: a typed part whose sizes are all still the page's own (only Quantity, holes or a menu changed) is not an order item
 // next to other parts: it never rides along into another tab's order, email or card. Alone on its tab it is priced as before.
-// Same size test as canAdd (plus thickness / wall); our own 12 mm foam-core bump isn't typed; a "Design for me" rotor counts.
-const SZK = { panel: ['pL', 'pW', 'pT'], molded: ['mL', 'mW', 'mH', 'mWall'], rotor: ['rD'] };
-const defSize = k => !!SZK[k] && !(k === 'rotor' && fs(k).querySelector('[name=rGeo]').value === 'design')
-  && SZK[k].every(n => { const el = fs(k).querySelector(`[name="${n}"]`); return el.value === el.defaultValue || n === 'pT' && !!el.dataset.bump && el.value === '12'; });
+// "Typed" = the buyer typed in one of the tab's size boxes (szTyped, set on input events, which only the buyer fires; our own
+// fills, the foam-core bump, Use inches/mm and file reads don't). Retyping "600" counts. A "Design for me" rotor counts.
+const SZK = { panel: ['pL', 'pW', 'pT'], molded: ['mL', 'mW', 'mH', 'mWall'], rotor: ['rD'] }, szTyped = {};
+const defSize = k => !!SZK[k] && !szTyped[k] && !(k === 'rotor' && fs(k).querySelector('[name=rGeo]').value === 'design');
 const filesPriced = () => cadNames().some(n => est.has(n)), ghost = () => !pricedFile && !!last && (filesPriced() || others().length > 0) && (!touched[kind] || blankTab() || defSize(kind));
 // c43: typed rotor, new mold, no file: estimate only, no card. c53: a typed molded part with a new mold and no file too.
 const noRotorFile = () => /^(rotor|molded)$/.test(kind) && !pricedFile && fs(kind).querySelector(kind === 'rotor' ? '[name=rGeo]' : '[name=mTool]').value === 'new' && !ghost();
@@ -1021,6 +1021,8 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => setKind
 // B171: typing or changing any field on a tab makes its typed part real; while files are priced it joins their order.
 const touch = e => { const k = e.target.closest && e.target.closest('fieldset')?.dataset.k; if (!k || touched[k]) return; touched[k] = 1;
   if (k === kind && !pricedFile && (filesPriced() || typedParts.size)) { if (!typedParts.size) $('#cadmsg').textContent = JOINED; render(); } };
+// c53: the buyer typed a size on this tab (capture: set before the renders below). The site never fires input events itself.
+qf.addEventListener('input', e => { const k = e.target.closest && e.target.closest('fieldset')?.dataset.k; if (k && SZK[k] && SZK[k].includes(e.target.name)) szTyped[k] = 1; }, true);
 qf.addEventListener('input', touch); qf.addEventListener('change', touch);
 qf.addEventListener('input', e => { if (/^p[LW]$/.test(e.target.name) && kind === 'panel' && pricedFile && pricedKind === 'panel' && !preEd) preEd = { f: pricedFile, est: est.get(pricedFile), rvw: rvw.get(pricedFile), fv: fileVals.get(pricedFile) };
   if (e.target.name === 'qty' || e.target.name === 'mCx') e.target.dataset.t = 1;
@@ -1057,7 +1059,7 @@ qf.addEventListener('change', e => { const n = e.target.name, s = preEd; if (!/^
 function unkeep(kk){ const e = typedParts.get(kk); if (!e) return; const k = e.k, live = typedParts.get(k);
   if (live) typedParts.set(kk, { ...live, kk, v: snap(k), ...(e.add ? { add: 1 } : {}) }); else typedParts.delete(kk);
   if (e.add) { typedParts.delete(k); renum(k); }   // c52: the part typed there is saved in its place, numbered again
-  putSnap(k, e.v); pricedFile = ''; pricedKind = ''; fileGeo = null; fileSurf = null; fileSolid = false; unitEl = null; delete tabFile[k]; touched[k] = 1;
+  putSnap(k, e.v); pricedFile = ''; pricedKind = ''; fileGeo = null; fileSurf = null; fileSolid = false; unitEl = null; delete tabFile[k]; touched[k] = 1; szTyped[k] = 1;   // c53: the buyer's own part
   setKind(k); }
 // c52 #1: "+ Add another part" saves the part typed on Flat or Molded as its own order item (like c49's kept part, several allowed)
 // and puts that tab back to the page's untouched fields for the next one. Only a part with an instant price and a size the buyer
@@ -1065,7 +1067,7 @@ function unkeep(kk){ const e = typedParts.get(kk); if (!e) return; const k = e.k
 const DEF = { panel: snap('panel'), molded: snap('molded') };   // the page's own fields, before anything is typed
 let addN = 0;
 function canAdd(){ const e = typedParts.get(kind);
-  return !!e && !e.rv && !pricedFile && !ghost() && /^(panel|molded)$/.test(kind) && (kind === 'panel' ? ['pL', 'pW'] : ['mL', 'mW', 'mH']).some(n => { const el = fs(kind).querySelector(`[name="${n}"]`); return el.value !== el.defaultValue; }); }
+  return !!e && !e.rv && !pricedFile && !ghost() && /^(panel|molded)$/.test(kind) && !!szTyped[kind]; }   // c53: a size the buyer typed, even the default "600"
 function renum(k){ let i = 0; typedParts.forEach(e => { if (e.add && e.k === k) e.name = `your ${tLbl(k)} #${++i}`; }); const live = typedParts.get(k); if (live) live.name = tName(k); }
 function unadd(kk){ const e = typedParts.get(kk); if (!e || !e.add) return; typedParts.delete(kk); renum(e.k);
   if (/^Added: /.test($('#cadmsg').textContent)) $('#cadmsg').textContent = ''; render(); }
@@ -1076,7 +1078,7 @@ const typedSize = k => { const p = (k === 'panel' ? ['pL', 'pW', 'pT'] : ['mL', 
 $('#addp').onclick = () => { const k = kind, e = typedParts.get(k); if (!canAdd()) return;
   const what = `${typedSize(k)} ${k === 'panel' ? (val('pCore') === 'core' ? 'foam-core panel' : 'flat panel') : 'molded part'}`;
   typedParts.delete(k); typedParts.set(`${k}+${++addN}`, { ...e, kk: `${k}+${addN}`, add: 1, v: snap(k) });
-  putSnap(k, DEF[k]); delete touched[k]; renum(k); render();
+  putSnap(k, DEF[k]); delete touched[k]; delete szTyped[k]; renum(k); render();
   $('#cadmsg').textContent = `Added: ${what} × ${e.q}. Type the next part.`;   // c52 plain-editor: "Added" matches the link
   const L = fs(k).querySelector(k === 'panel' ? '[name=pL]' : '[name=mL]'); L.focus(); L.select(); };
 
