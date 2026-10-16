@@ -638,8 +638,18 @@ const customLines = () => customOthers().map(([n, , u]) => `${n.startsWith('your
 // the order. A "Design for me" rotor stays in with no diameter (custom quote). Assembly and an unreadable size are unchanged.
 const blankTab = () => !pricedFile && kind !== 'assembly' && !(kind === 'rotor' && val('rGeo') === 'design')
   && [...fs(kind).querySelectorAll('input')].some(el => SIZES.includes(el.name) && el.name !== 'mH' && !el.closest('[hidden]') && !el.value.trim());
-const filesPriced = () => cadNames().some(n => est.has(n)), ghost = () => !pricedFile && !!last && (filesPriced() || others().length > 0) && (!touched[kind] || blankTab());
-const noRotorFile = () => kind === 'rotor' && !pricedFile && val('rGeo') === 'new' && !ghost();   // c43: typed rotor, new mold, no file: estimate only, no card
+// c53: a typed part whose sizes are all still the page's own (only Quantity, holes or a menu changed) is not an order item
+// next to other parts: it never rides along into another tab's order, email or card. Alone on its tab it is priced as before.
+// Same size test as canAdd (plus thickness / wall); our own 12 mm foam-core bump isn't typed; a "Design for me" rotor counts.
+const SZK = { panel: ['pL', 'pW', 'pT'], molded: ['mL', 'mW', 'mH', 'mWall'], rotor: ['rD'] };
+const defSize = k => !!SZK[k] && !(k === 'rotor' && fs(k).querySelector('[name=rGeo]').value === 'design')
+  && SZK[k].every(n => { const el = fs(k).querySelector(`[name="${n}"]`); return el.value === el.defaultValue || n === 'pT' && !!el.dataset.bump && el.value === '12'; });
+const filesPriced = () => cadNames().some(n => est.has(n)), ghost = () => !pricedFile && !!last && (filesPriced() || others().length > 0) && (!touched[kind] || blankTab() || defSize(kind));
+// c43: typed rotor, new mold, no file: estimate only, no card. c53: a typed molded part with a new mold and no file too.
+const noRotorFile = () => /^(rotor|molded)$/.test(kind) && !pricedFile && fs(kind).querySelector(kind === 'rotor' ? '[name=rGeo]' : '[name=mTool]').value === 'new' && !ghost();
+const noFileTxt = k => `Add your ${k === 'rotor' ? 'rotor' : 'part'} file to pay by card. No file? Press Send and we'll reply.`;
+// c53: the no-file part blocking the card: this tab's, else a typed or saved one on another tab (so the button never vanishes unexplained).
+const noFileKind = () => noRotorFile() ? kind : ([...typedParts].find(([k, e]) => k !== kind && e.nf) || [])[1]?.k;
 const combo = () => { const fl = cadNames().filter(n => est.has(n)), ot = others(); let it;
   if (pricedFile) { if (badSize || needSize || last.manual || !fl.includes(pricedFile) || fl.length + ot.length < 2 || fl.length > 1 && !last.only) return null; it = [...fl.map(n => [n, est.get(n)]), ...ot]; }
   else {   // B171/B168: a typed part joins the files' order like a file does (one part check, one total); a ghost tab lists the files alone
@@ -857,7 +867,9 @@ function needNote(){
   el.hidden = !f;
 }
 // Phones: a bar pinned to the bottom shows the total while the form is on screen and the price box isn't.
-function render(){ draw(); needNote(); $('#addp').hidden = !canAdd(); const pu = payUsd(), uc = pricedFile && kind === pricedKind && /^(panel|molded)$/.test(kind) && fileCtx.get(pricedFile);
+function render(){ draw(); needNote();
+  // c53: "Your typed part is in your order" only once a size is typed; Quantity alone leaves the "Type a part's sizes" line.
+  if (!pricedFile && filesPriced() && kind !== 'assembly') { const m = $('#cadmsg'), g = ghost(); if (g && m.textContent === JOINED) m.textContent = GHOST_MSG; else if (!g && m.textContent === GHOST_MSG) m.textContent = JOINED; } $('#addp').hidden = !canAdd(); const pu = payUsd(), uc = pricedFile && kind === pricedKind && /^(panel|molded)$/.test(kind) && fileCtx.get(pricedFile);
   $('#unit').hidden = !(uc && NOU.test(uc.g.units) && (uc.g.inch || inchOk(uc.g, kind))); if (uc) $('#unit').textContent = uc.g.inch ? 'Sizes in mm? Use mm' : 'Sizes in inches? Use inches';  /* B174 */ $('#pay').hidden = $('#payterms').hidden = $('#paylink').hidden = !pu; $('#pay').textContent = pu ? `Order and pay ${usd(pu)} by card` : 'Order and pay by card'; $('#barlb').textContent = $('#estlb').textContent; $('#bartot').textContent = $('#tot').textContent; }
 const seen = new Map(), io = new IntersectionObserver(es => {
   es.forEach(e => seen.set(e.target, e.isIntersecting));
@@ -888,7 +900,7 @@ function draw(){
   // B176: keep this tab's typed part for the other tabs; a file on the tab, empty sizes or an untouched tab means none.
   // B200: a filled-in Assembly description is a custom-quote item in every tab's request, with or without a file on that tab.
   const A = kind === 'assembly', aTxt = A && fs('assembly').querySelector('[name=aDesc]').value.trim();
-  if (A ? !aTxt || badSize : pricedFile || !touched[kind] || badSize || needSize) typedParts.delete(kind);
+  if (A ? !aTxt || badSize : pricedFile || !touched[kind] || badSize || needSize || defSize(kind)) typedParts.delete(kind);   // c53: defSize
   else typedParts.set(kind, { t: 1, k: kind, hq: last.hr * last.q, nf: noRotorFile(), name: tName(kind), lbl: tLbl(kind), q: last.q, sets: last.sets, spec: A ? last.spec[0].replace(/^Assembly: /, '') : last.spec[0], wl: last.spec.find(l => /^Weight/.test(l)), ul: A ? last.spec.slice(1) : unitLines(kind), ...(last.manual ? { rv: 1, why: last.review, units: last.units }
     : { sub: last.sub, lead: last.lead, lines: last.lines.filter(l => !/^Minimum order/.test(l[0])) }) });
   // B171: an untouched typed tab while files are priced: the price box shows the files' order, not the tab's default part.
@@ -899,7 +911,7 @@ function draw(){
     $('#tot').textContent = usd(Math.max(G.t, P.minOrder));
     $('#per').innerHTML = `${G.it.map(([n, e]) => `${fLink(n, e)} × ${qS(e)}: ${usd(e.sub - R)}${rmL(e)}`).join(' + ')} + ${usd(R)} part check (once per order)${lo ? ` + ${usd(P.minOrder - G.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(G.lead)} if you approve today${G.slow ? `. ${esc(G.slow)} takes the longest, so it sets this date.${flatNote(G)}` : ''}${cl.map(l => `\n<div>${esc(l)}</div>`).join('')}`;   // B173: file names are links
     $('#lines').innerHTML = [...G.it.map(([n, e]) => [`Subtotal for ${n}`, e.sub - R]), ['Part check (once per order)', R], ...(lo ? [[`Minimum order (${usd(P.minOrder)})`, P.minOrder - G.t]] : [])].map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Total</td><td class="n">${usd(Math.max(G.t, P.minOrder))}</td></tr>`;
-    $('#warn').innerHTML = '';
+    $('#warn').innerHTML = CHECKOUT && noFileKind() ? `<div>${noFileTxt(noFileKind())}</div>` : '';   // c53: say why there's no card button
     return;
   }
   if (badSize) {
@@ -956,7 +968,7 @@ function draw(){
   // stock catalog items; carbon + glass sheet isn't, so no line for it.
   const fit2 = noFile && !holes && val('pCore') !== 'core' && val('pMat') !== 'hybrid' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
     : kind === 'rotor' && val('rGeo') === 'new' ? ["A stock-size prop usually costs less from a catalog. We're best for custom rotors."] : [];
-  $('#warn').innerHTML = [...(kind === 'rotor' ? [rotorNote()] : []), ...(CHECKOUT && noRotorFile() ? ["Add your rotor file to pay by card. No file? Press Send and we'll reply."] : []), ...(CHECKOUT && repeatOrd() ? [repeatNote()] : []), ...(last.wt ? [last.wt] : []), ...(kind === 'panel' ? (m => m ? [`${cap(m[0])}.`] : [])((last.spec[0] || '').match(/edges sealed(?:, holes filled for bolts)?/)) : []), ...plain, ...fit2, ...last.warn, ...((last.only || C) && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin && !C ? [`Every order is at least ${usd(P.minOrder)}.${cl.length ? '' : last.fit > last.q ? (last.sets > 1 ? ` That covers up to ${last.fit} sets, so you can add more at no extra cost.` : ` That covers ${last.fit} of this part, so you can add more at no extra cost.`) : ''}${typed && !cl.length ? ' Have more parts? Add them here and we\'ll price them as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+  $('#warn').innerHTML = [...(kind === 'rotor' ? [rotorNote()] : []), ...(CHECKOUT && noFileKind() ? [noFileTxt(noFileKind())] : []), ...(CHECKOUT && repeatOrd() ? [repeatNote()] : []), ...(last.wt ? [last.wt] : []), ...(kind === 'panel' ? (m => m ? [`${cap(m[0])}.`] : [])((last.spec[0] || '').match(/edges sealed(?:, holes filled for bolts)?/)) : []), ...plain, ...fit2, ...last.warn, ...((last.only || C) && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin && !C ? [`Every order is at least ${usd(P.minOrder)}.${cl.length ? '' : last.fit > last.q ? (last.sets > 1 ? ` That covers up to ${last.fit} sets, so you can add more at no extra cost.` : ` That covers ${last.fit} of this part, so you can add more at no extra cost.`) : ''}${typed && !cl.length ? ' Have more parts? Add them here and we\'ll price them as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 // The card button shows only for one firm instant number covering the whole request: no custom quote, no "Check your sizes",
@@ -986,7 +998,7 @@ function setKind(k, byFile){
     if (!filesPriced() && (est.has(away) || rvw.has(away)) && tab) $('#cadmsg').textContent = `This price is only for the part you typed. ${away} is still in your request, on the ${tab} tab.`;
   }
   // B171: a typed tab while files are priced: an untouched one isn't in the order yet; a touched one is in it with the files.
-  if (!byFile && !back && !pricedFile && filesPriced()) $('#cadmsg').textContent = touched[k] ? JOINED : GHOST_MSG;
+  if (!byFile && !back && !pricedFile && filesPriced()) $('#cadmsg').textContent = touched[k] && !defSize(k) ? JOINED : GHOST_MSG;   // c53: default sizes aren't a part
   // B176: name the typed parts from the other tabs that are still in the request.
   const ot = !byFile && !back && !pricedFile && [...typedParts].filter(([t, e]) => t !== k && !e.kk).map(([, e]) => e);   // c49: a kept part is named in the price box
   // c51: no typed part left on another tab: drop that tab's "from the other tab" line (it named the part now on screen).
