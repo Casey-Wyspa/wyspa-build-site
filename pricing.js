@@ -56,7 +56,7 @@ window.WYSPA_PRICING = {
     core: { label: "Foam core", stock: [[3.175, 36], [6.35, 54], [9.525, 77], [12.7, 95], [15.875, 110], [19.05, 133], [25.4, 165], [31.75, 201]], bondM2: 12,
             hrPerM2: 0.4, minT: 3, density: 80, bondKgM2: 0.3,
             seal: { hrPerM: 0.04, hrPerPart: 0.05, usdPerM2Edge: 129 },   // cut foam edges filled and sanded flush: aPriori paste 0.1 m/s + NREL hand trim 30 m/h + 3 min handling; 3 mm fill x 1.08 g/cm³ x $39.81/kg. research/pricing/core-edges-inserts-2026-10-16.md
-            pot:  { hr: 0.15, usdPerMm: 0.22 },   // per hole through the core: Dzus US3964531 10 min/insert (aPriori 40 s potting step only); aPriori 80 mm potted cylinder x core mm, epoxy $39.81/kg
+            pot:  { hr: 0.05, hrPart: 0.05, usdPerMm: 0.22 },   // c52: per filled hole + once per part with holes (one mix, tape, clean-up). Steps: core-out 20 s (Compass Marine marinehowto.com/?p=11571 "10-20 seconds, per hole") + fill 40 s (aPriori) + top-off/flush ~60 s; SECAM: conventional potted NAS insert 2 min incl. drilling (vendor claim). Was 0.15 h/hole (Dzus US3964531, 10 min per metal insert, one at a time). Resin: aPriori 80 mm potted cylinder x core mm, epoxy $39.81/kg. research/pricing/potted-hole-time-2026-10-16.md
           },
     finish: {
       matte: { label: "Matte", perM2: 0,  hrPerM2: 0 },
