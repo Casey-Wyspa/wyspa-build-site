@@ -718,6 +718,7 @@ function applyFile(g, file, sketch, picked, re) {
   // B45: a 2D file has no thickness, so say which thickness we used (B55: data-d keeps it for the email until the buyer types one).
   const noT = kind === 'panel' && !(g.T > 0.2);
   const t = qf.elements.pT;
+  if (kind === 'panel') delete t.dataset.bump;   // c47: a file's thickness isn't our foam-core bump, so solid must not undo it
   // B172: a thickness another file put there (data-f) wasn't typed either, so it's "set to", never "you typed".
   if (noT && (t.value === t.defaultValue || (again ? t.dataset.d === t.value : t.value === t.dataset.f))) t.dataset.d = t.value; else delete t.dataset.d;
   const tMsg = thickMsg();
@@ -963,8 +964,11 @@ $('#sf').elements.need.addEventListener('input', needNote);
 qf.elements.pCore.addEventListener('change', e => {
   const t = qf.elements.pT;
   // Only replace the untouched 2 mm default. A typed or file thickness stays; if it's too thin, the price box asks "Is it in inches?" (B47).
-  if (e.target.value === 'core' && t.value === t.defaultValue) { t.value = 12; render(); }
+  if (e.target.value === 'core' && t.value === t.defaultValue) { t.dataset.bump = t.value; t.value = 12; render(); }
+  // c47: back to solid undoes our own 12 mm bump (it left a 12 mm solid plate -> custom quote); a thickness typed since then stays.
+  else if (e.target.value !== 'core' && t.dataset.bump && t.value === '12') { t.value = t.dataset.bump; delete t.dataset.bump; render(); }
 });
+qf.elements.pT.addEventListener('input', e => { delete e.target.dataset.bump; });
 
 function summary(){
   // B140: with 2+ priced files (C), file blocks leave the review out; it's listed once in the order section at the end.
