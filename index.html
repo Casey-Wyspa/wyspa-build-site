@@ -650,6 +650,11 @@ const noRotorFile = () => /^(rotor|molded)$/.test(kind) && !pricedFile && fs(kin
 const noFileTxt = k => `Add your ${k === 'rotor' ? 'rotor' : 'part'} file to pay by card. No file? Press Send and we'll reply.`;
 // c53: the no-file part blocking the card: this tab's, else a typed or saved one on another tab (so the button never vanishes unexplained).
 const noFileKind = () => noRotorFile() ? kind : ([...typedParts].find(([k, e]) => k !== kind && e.nf) || [])[1]?.k;
+// c54: a molded file we read as closed or hollow (ctx.cx) whose Shape the buyer changed keeps its instant price, but the
+// order gets no card button until we've checked it (same as a no-file new mold). Its file's Shape is on screen, else saved in fileVals.
+const CLOSED_TXT = "Your file looks closed or hollow. Press Send and we'll check it, then send a pay link.";   // plain-editor c54
+const fileCx = n => n === pricedFile && kind === pricedKind ? val('mCx') : (((fileVals.get(n) || {}).v || []).find(x => x[0] === 'mCx') || [])[1];
+const closedOv = () => cadNames().some(n => fileCtx.get(n)?.cx && (v => !!v && v !== 'complex')(fileCx(n)));
 const combo = () => { const fl = cadNames().filter(n => est.has(n)), ot = others(); let it;
   if (pricedFile) { if (badSize || needSize || last.manual || !fl.includes(pricedFile) || fl.length + ot.length < 2 || fl.length > 1 && !last.only) return null; it = [...fl.map(n => [n, est.get(n)]), ...ot]; }
   else {   // B171/B168: a typed part joins the files' order like a file does (one part check, one total); a ghost tab lists the files alone
@@ -717,7 +722,7 @@ function applyFile(g, file, sketch, picked, re) {
   fileSurf = g.kind === 'molded' && g.m2 > 0 ? { L: Math.round(g.L), W: Math.round(g.W), H: Math.round(g.H), m2: g.m2, f: [g.L, g.W, g.H], nu: !g.inch && /^(assumed mm|read as mm)/.test(g.units) } : null;   // B68: the file's real surface (B145: f, nu for an inch file read as mm)
   // data-f marks a value that came from the file, so the typed-in-inches checks (B36) skip it.
   const r = Math.round, put = (n, v) => { const el = qf.querySelector(`[name="${n}"]`); el.value = v; el.dataset.f = el.value; };
-  let what, inHead = '', wallIn = '';
+  let what, inHead = '', wallIn = '', readCx = false;   // c54: readCx = the file read as closed or hollow (Shape set to custom quote)
   const moved = !picked && kind === 'panel' && g.kind === 'molded';   // B107: a 3D file dropped on Flat panel that isn't flat
   // C37: a 2D file (DXF, Rhino curves) dropped on Drone rotor is a flat outline: price it on Flat panel, never as a rotor
   // sized from its long side. Rotors are typed by diameter. 3D files (a rotor STL) stay on the rotor tab.
@@ -752,7 +757,8 @@ function applyFile(g, file, sketch, picked, re) {
     // Shape from the file (B28): an open shell at most half as deep as its shorter side = open/shallow (B90: exactly half is Open); deeper = medium.
     // Flanges and inserts can't be read from a mesh, so the buyer picks those. Was depth < 15% of the longest side.
     const span = Math.min(g.L, g.W);
-    put('mCx', g.complex || fileSolid ? 'complex' : span > 0 && g.H / span <= 0.5 ? 'simple' : 'medium');
+    readCx = !!(g.complex || fileSolid);
+    put('mCx', readCx ? 'complex' :span > 0 && g.H / span <= 0.5 ? 'simple' : 'medium');
     // B66: an inch STEP is shown in inches first, like an inch DXF (B57).
     what = `${g.inch ? `${inch(g.L)} × ${inch(g.W)} × ${inch(g.H)} in (${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm)` : `${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm`}${g.wall ? `, about ${wall} mm wall` : ''}`;
     // B147: the same file read as inches, shown once the typed sizes match it in inches (inchNote).
@@ -785,7 +791,7 @@ function applyFile(g, file, sketch, picked, re) {
   const keptT = again ? !!t.dataset.k : t.value !== t.defaultValue;
   if (noT && (t.value === t.defaultValue || (again ? t.dataset.d === t.value : t.value === t.dataset.f))) { t.dataset.d = t.value; if (keptT) t.dataset.k = '1'; else delete t.dataset.k; } else { delete t.dataset.d; delete t.dataset.k; }
   const tMsg = thickMsg();
-  const ctx = { fileSurf, fileGeo, fileSolid, unitEl, unitAs, msg: '', g, head: `From ${file.name}: ${what} (${g.units}).`, inHead, wallIn, wall0: kind === 'molded' ? qf.elements.mWall.value : '' };
+  const ctx = { cx: readCx,fileSurf, fileGeo, fileSolid, unitEl, unitAs, msg: '', g, head: `From ${file.name}: ${what} (${g.units}).`, inHead, wallIn, wall0: kind === 'molded' ? qf.elements.mWall.value : '' };
   pricedKind = kind; tabFile[kind] = { f: file.name, c: ctx }; fileCtx.set(file.name, ctx);
   if (keepTp) typedParts.set('panel*', { ...tp, kk: 'panel*', v: tpv });
   render();
@@ -918,7 +924,7 @@ function draw(){
     $('#tot').textContent = usd(Math.max(G.t, P.minOrder));
     $('#per').innerHTML = `${G.it.map(([n, e]) => `${fLink(n, e)} × ${qS(e)}: ${usd(e.sub - R)}${rmL(e)}`).join(' + ')} + ${usd(R)} part check (once per order)${shOut(G)}${lo ? ` + ${usd(P.minOrder - G.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(G.lead)} if you approve today${G.slow ? `. ${esc(G.slow)} takes the longest, so it sets this date.${flatNote(G)}` : ''}${cl.map(l => `\n<div>${esc(l)}</div>`).join('')}`;   // B173: file names are links
     $('#lines').innerHTML = [...G.it.map(([n, e]) => [`Subtotal for ${n}`, e.sub - R]), ['Part check (once per order)', R], ...shRow(G), ...(lo ? [[`Minimum order (${usd(P.minOrder)})`, P.minOrder - G.t]] : [])].map(l => `<tr><td>${l[0]}</td><td class="n">${usdS(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Total</td><td class="n">${usd(Math.max(G.t, P.minOrder))}</td></tr>`;
-    $('#warn').innerHTML = CHECKOUT && noFileKind() ? `<div>${noFileTxt(noFileKind())}</div>` : '';   // c53: say why there's no card button
+    $('#warn').innerHTML = [...(CHECKOUT && noFileKind() ? [noFileTxt(noFileKind())] : []), ...(CHECKOUT && closedOv() ? [CLOSED_TXT] : [])].map(w => `<div>${w}</div>`).join('\n');   // c53/c54: say why there's no card button
     return;
   }
   if (badSize) {
@@ -975,7 +981,7 @@ function draw(){
   // stock catalog items; carbon + glass sheet isn't, so no line for it.
   const fit2 = noFile && !holes && val('pCore') !== 'core' && val('pMat') !== 'hybrid' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
     : kind === 'rotor' && val('rGeo') === 'new' ? ["A stock-size prop usually costs less from a catalog. We're best for custom rotors."] : [];
-  $('#warn').innerHTML = [...(kind === 'rotor' ? [rotorNote()] : []), ...(CHECKOUT && noFileKind() ? [noFileTxt(noFileKind())] : []), ...(CHECKOUT && repeatOrd() ? [repeatNote()] : []), ...(last.wt ? [last.wt] : []), ...(kind === 'panel' ? (m => m ? [`${cap(m[0])}.`] : [])((last.spec[0] || '').match(/edges sealed(?:, holes filled for bolts)?/)) : []), ...plain, ...fit2, ...last.warn, ...((last.only || C) && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin && !C ? [`Every order is at least ${usd(P.minOrder)}.${cl.length ? '' : last.fit > last.q ? (last.sets > 1 ? ` That covers up to ${last.fit} sets, so you can add more at no extra cost.` : ` That covers ${last.fit} of this part, so you can add more at no extra cost.`) : ''}${typed && !cl.length ? ' Have more parts? Add them here and we\'ll price them as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+  $('#warn').innerHTML = [...(kind === 'rotor' ? [rotorNote()] : []), ...(CHECKOUT && noFileKind() ? [noFileTxt(noFileKind())] : []), ...(CHECKOUT && closedOv() ? [CLOSED_TXT] : []), ...(CHECKOUT && repeatOrd() ? [repeatNote()] : []), ...(last.wt ? [last.wt] : []), ...(kind === 'panel' ? (m => m ? [`${cap(m[0])}.`] : [])((last.spec[0] || '').match(/edges sealed(?:, holes filled for bolts)?/)) : []), ...plain, ...fit2, ...last.warn, ...((last.only || C) && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin && !C ? [`Every order is at least ${usd(P.minOrder)}.${cl.length ? '' : last.fit > last.q ? (last.sets > 1 ? ` That covers up to ${last.fit} sets, so you can add more at no extra cost.` : ` That covers ${last.fit} of this part, so you can add more at no extra cost.`) : ''}${typed && !cl.length ? ' Have more parts? Add them here and we\'ll price them as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 // The card button shows only for one firm instant number covering the whole request: no custom quote, no "Check your sizes",
@@ -984,7 +990,7 @@ function payUsd(){
   if (!CHECKOUT || !last || badSize && !ghost() || needSize || last.manual || last.units || kind === 'assembly') return 0;
   const C = combo(), fl = cadNames();
   // B176/B181: a typed part on another tab that has no instant price, or isn't in the total, means no card button.
-  if (noRotorFile() || repeatOrd() || [...typedParts].some(([k, e]) => k !== kind && (e.rv || e.nf || !C))) return 0;   // c43: a new rotor mold needs the buyer's file before card payment
+  if (noRotorFile() || repeatOrd() || closedOv() ||[...typedParts].some(([k, e]) => k !== kind && (e.rv || e.nf || !C))) return 0;   // c43: a new rotor mold needs the buyer's file before card payment
   const t = C ? (fl.every(n => est.has(n)) ? Math.max(C.t, P.minOrder) : 0) : (last.only || fl.some(n => n !== pricedFile) ? 0 : last.total), r = Math.round(t);
   return isFinite(r) && r >= P.minOrder && r <= 50000 && usd(r) === $('#tot').textContent ? r : 0;
 }
