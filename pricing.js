@@ -70,7 +70,8 @@ window.WYSPA_PRICING = {
     hrPerMCut: 0.09,          // per meter of cut edge: CNC rough + finish pass 0.052 h/m (Amana CFRP chart, 1/4 in bit 23 + 28 in/min, one pass to 6.35 mm)
                               //   + hand edge trim/deburr 0.033 h/m (NREL blade cost model, shear-web trim 30 m/h/person); build_work/research/pricing/panel-hours-2026-10-13.md
     hrPerHole: 0.02,
-    setupHours: 1.5,          // per order: CNC program + fixture
+    setupHours: 1.5,          // once per order: file check, CAM, vacuum table + zero (holes-setup-2026-10-15.md)
+    setupExtraHours: 0.5,     // each further flat item in the order: its toolpath + its own sheet zero and first-part check (setup-per-order-2026-10-16.md)
     maxSize: [2400, 1200],    // mm, largest sheet partner builders press
   },
 
@@ -94,7 +95,7 @@ window.WYSPA_PRICING = {
       medium:  { label: "Deep, or has flanges or inserts",    labor: 1.6, tool: 1.7 },
       complex: { label: "Closed or hollow (custom quote)",  labor: 2.6, tool: 2.8 },
     },
-    setupHours: 3,                         // new-mold orders: ply templates, trim fixture, first-part check
+    setupHours: 3,                         // per new mold (each new-mold item): ply templates, trim fixture, first-part check
     hrPerPart: 2.0, trimHours: 2.0,        // per part: mold prep, bag and cure; trim, sand and drill
     fixedFullM2: 0.12, fixedMinScale: 0.4, // B90: under 0.12 m² of surface, the per-part and per-extra-cure hours scale with sqrt(area / 0.12) (edge to trim and bag), never under 0.4x (1.6 h). Full 4 h at 0.12 m² and up (D-spigot 0.12 m², foil-wing skin 0.23 m²). research/pricing/b90-small-molded-2026-10-13.md. Since c40 this applies to trimHours only.
     prepFullM2: 0.234,                     // c40: hrPerPart (mold prep, bag, demold) and hrPerCure scale with sqrt(area / 0.234), same 0.4 floor: S8 (foil-wing skin, 0.234 m²) is the job that timed mold prep; S11 (0.12 m²) timed finishing only. research/pricing/small-molded-cover-2026-10-15.md

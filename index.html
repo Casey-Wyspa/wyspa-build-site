@@ -663,7 +663,14 @@ const combo = () => { const fl = cadNames().filter(n => est.has(n)), ot = others
 // c48: an item's quantity, in sets for a file with several parts ("× 25 sets"), like its Quantity line.
 const qS = e => `${e.q}${e.sets > 1 ? e.q === 1 ? ' set' : ' sets' : ''}`;
 // One order from its priced items: one part check for all of them, ready when the slowest is (B197: also the priced parts next to a custom quote).
-const mkOrder = it => ({ it, typed: it.some(x => x[1].t), t: it.reduce((s, x) => s + x[1].sub, 0) - (it.length - 1) * Math.round(price(P.reviewHours, 0)), txt: it.map(([n, e]) => `${n} × ${qS(e)}`).join(', '),
+// c54: flat setup once per order; each further flat item (file, typed or saved panel part; a nested DXF is one) pays setupExtraHours,
+// so the order takes off round(setupHours) - round(setupExtraHours) per extra flat item, like the shared part check (setup-per-order-2026-10-16.md).
+const shUsd = () => P.panel.setupExtraHours != null ? Math.round(price(P.panel.setupHours, 0)) - Math.round(price(P.panel.setupExtraHours, 0)) : 0;
+const shTxt = O => `shared setup (${O.nF > 2 ? `${O.nF} ` : ''}flat parts)`;   // plain-editor c54
+const mkOrder = it => { const O = mkOrder1(it), nF = it.filter(x => x[1].k === 'panel').length, sh = Math.max(0, nF - 1) * shUsd(); return { ...O, nF, sh, t: O.t - sh }; };
+// c54: shOut = the order line for it on screen; one '−' line, after the part check, so the lines still add up to the total (B31/B140).
+const shOut = O => O && O.sh ? ` − ${usd(O.sh)} ${shTxt(O)}` : '', shRow = O => O && O.sh ? [[cap(shTxt(O)), -O.sh]] : [], usdS = n => n < 0 ? `−${usd(-n)}` : usd(n);
+const mkOrder1 = it => ({ it, typed: it.some(x => x[1].t), t: it.reduce((s, x) => s + x[1].sub, 0) - (it.length - 1) * Math.round(price(P.reviewHours, 0)), txt: it.map(([n, e]) => `${n} × ${qS(e)}`).join(', '),
     lead: [0, 1].map(i => Math.max(...it.map(x => x[1].lead[i]))),   // B100: the order is ready when its slowest part is
     slow: (L => L.some(v => v < Math.max(...L)) ? (x => nm(x[0], x[1]))(it[L.indexOf(Math.max(...L))]) : '')(it.map(x => x[1].lead[1])) });   // B148: that part, if the others are sooner
 // c44 #1: when a slower part sets the order's date, the flat parts' own date (all flat parts as one batch, same rule as calc's lead).
@@ -909,8 +916,8 @@ function draw(){
     const R = rvwUsd(), lo = G.t < P.minOrder, cl = customLines();   // c48 #1: custom-quote items named in the box
     $('#estlb').textContent = cl.length ? 'Estimate for the priced parts' : G.typed ? 'Estimate for your whole order' : G.it.length > 1 ? 'Estimate for all your files' : 'Estimate'; $('#tot').style.fontSize = '';
     $('#tot').textContent = usd(Math.max(G.t, P.minOrder));
-    $('#per').innerHTML = `${G.it.map(([n, e]) => `${fLink(n, e)} × ${qS(e)}: ${usd(e.sub - R)}${rmL(e)}`).join(' + ')} + ${usd(R)} part check (once per order)${lo ? ` + ${usd(P.minOrder - G.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(G.lead)} if you approve today${G.slow ? `. ${esc(G.slow)} takes the longest, so it sets this date.${flatNote(G)}` : ''}${cl.map(l => `\n<div>${esc(l)}</div>`).join('')}`;   // B173: file names are links
-    $('#lines').innerHTML = [...G.it.map(([n, e]) => [`Subtotal for ${n}`, e.sub - R]), ['Part check (once per order)', R], ...(lo ? [[`Minimum order (${usd(P.minOrder)})`, P.minOrder - G.t]] : [])].map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Total</td><td class="n">${usd(Math.max(G.t, P.minOrder))}</td></tr>`;
+    $('#per').innerHTML = `${G.it.map(([n, e]) => `${fLink(n, e)} × ${qS(e)}: ${usd(e.sub - R)}${rmL(e)}`).join(' + ')} + ${usd(R)} part check (once per order)${shOut(G)}${lo ? ` + ${usd(P.minOrder - G.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(G.lead)} if you approve today${G.slow ? `. ${esc(G.slow)} takes the longest, so it sets this date.${flatNote(G)}` : ''}${cl.map(l => `\n<div>${esc(l)}</div>`).join('')}`;   // B173: file names are links
+    $('#lines').innerHTML = [...G.it.map(([n, e]) => [`Subtotal for ${n}`, e.sub - R]), ['Part check (once per order)', R], ...shRow(G), ...(lo ? [[`Minimum order (${usd(P.minOrder)})`, P.minOrder - G.t]] : [])].map(l => `<tr><td>${l[0]}</td><td class="n">${usdS(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Total</td><td class="n">${usd(Math.max(G.t, P.minOrder))}</td></tr>`;
     $('#warn').innerHTML = CHECKOUT && noFileKind() ? `<div>${noFileTxt(noFileKind())}</div>` : '';   // c53: say why there's no card button
     return;
   }
@@ -935,7 +942,7 @@ function draw(){
     $('#estlb').textContent = 'Quote'; $('#tot').textContent = 'Custom quote'; $('#tot').style.fontSize = 'clamp(30px,4vw,40px)';
     $('#per').textContent = O ? `${kind !== 'assembly' && pricedFile || cap(tLbl(kind))}: custom quote. Your other parts: ${usd(Math.max(O.t, P.minOrder))}${O.t < P.minOrder ? ' (our order minimum)' : ''}. Send it and we\'ll reply with one price for everything.` : kind === 'assembly' ? 'Send it with your files. We reply with a price.' : 'We need to look at this one. Send it and we reply with a price.';
     // B197: the order minimum once, as on the priced part's own tab and in the email.
-    $('#lines').innerHTML = O ? [...O.it.map(([n, e]) => [`Subtotal for ${n}`, e.sub - R]), ['Part check (once per order)', R], ...(O.t < P.minOrder ? [[`Minimum order (${usd(P.minOrder)})`, P.minOrder - O.t]] : [])].map(l => `<tr><td>${esc(l[0])}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Your other parts</td><td class="n">${usd(Math.max(O.t, P.minOrder))}</td></tr>` : '';
+    $('#lines').innerHTML = O ? [...O.it.map(([n, e]) => [`Subtotal for ${n}`, e.sub - R]), ['Part check (once per order)', R], ...shRow(O), ...(O.t < P.minOrder ? [[`Minimum order (${usd(P.minOrder)})`, P.minOrder - O.t]] : [])].map(l => `<tr><td>${esc(l[0])}</td><td class="n">${usdS(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Your other parts</td><td class="n">${usd(Math.max(O.t, P.minOrder))}</td></tr>` : '';
     $('#warn').innerHTML = kind === 'assembly' ? '' : `<div>Why: ${last.review.join(' · ')}</div>${last.review.includes('Small, thick molded part') ? '\n<div>Could it be flat plates bonded together? Try the Flat panel tab.</div>' : ''}${kind === 'rotor' ? `\n<div>${rotorNote()}</div>` : ''}`;
     return;
   }
@@ -955,7 +962,7 @@ function draw(){
   const noEach = cl.length && last.belowMin;   // "$750 each, all in" would charge the minimum to this part alone
   $('#tot').textContent = usd(C ? Math.max(C.t, P.minOrder) : last.total);   // the minimum is per order, so that's what 2+ files below it cost
   // B126: the per-file subtotals plus one review add up to the big number.
-  $('#per').innerHTML = C ? `${C.it.map(([n, e]) => `${fLink(n, e)} × ${qS(e)}: ${usd(e.sub - R)}${rmL(e)}`).join(' + ')} + ${usd(R)} part check (once per order)${C.t < P.minOrder ? ` + ${usd(P.minOrder - C.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(C.lead)} if you approve today${C.slow ? `. ${esc(C.slow)} takes the longest, so it sets this date.${flatNote(C)}` : ''}`
+  $('#per').innerHTML = C ? `${C.it.map(([n, e]) => `${fLink(n, e)} × ${qS(e)}: ${usd(e.sub - R)}${rmL(e)}`).join(' + ')} + ${usd(R)} part check (once per order)${shOut(C)}${C.t < P.minOrder ? ` + ${usd(P.minOrder - C.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(C.lead)} if you approve today${C.slow ? `. ${esc(C.slow)} takes the longest, so it sets this date.${flatNote(C)}` : ''}`
     : `${noEach ? '' : `${each} ${last.sets > 1 ? 'per set' : 'each'}, all in · `}Ready about ${readyRange()} if you approve today${last.only ? '. We\'ll send one price for all your files. The review and minimum apply once.' : ''}`;   // B173: file names are links
   if (cl.length) $('#per').innerHTML += cl.map(l => `\n<div>${esc(l)}</div>`).join('');   // the newline keeps copied text apart (B70)
   $('#lines').innerHTML = (C ? last.lines.filter(noMin) : last.lines).map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${C ? `Subtotal for ${pricedFile || tName(kind)}` : last.only ? `Total for ${last.only}` : 'Total'}</td><td class="n">${usd((C ? last.sub : last.total) - R)}</td></tr>`;
@@ -1117,7 +1124,7 @@ function summary(){
     // B194: the Order line lists every item; custom-quote ones are marked. With no order section (one priced part), the line alone.
     ...(!C && cu.length && pz.length ? ['', `Order: ${[...pz.map(([n, e]) => `${n} × ${qS(e)}`), ...cu].join(', ')}`] : []),
     // B140: the order section. File subtotals + review (+ minimum top-up) = the order estimate.
-    ...(C ? ['', `Order: ${[C.txt, ...cu].join(', ')}`, `Part check (once per order): ${usd(R)}`, ...(C.t < P.minOrder ? [`To reach ${usd(P.minOrder)} minimum: ${usd(P.minOrder - C.t)}`] : []),
+    ...(C ? ['', `Order: ${[C.txt, ...cu].join(', ')}`, `Part check (once per order): ${usd(R)}`, ...(C.sh ? [`${cap(shTxt(C))}: −${usd(C.sh)}`] : []), ...(C.t < P.minOrder ? [`To reach ${usd(P.minOrder)} minimum: ${usd(P.minOrder - C.t)}`] : []),
       `${cu.length ? 'Estimate for the priced parts' : 'Order estimate'}: ${usd(Math.max(C.t, P.minOrder))} (not a firm quote)`,
       `${cu.length ? 'Priced parts' : 'All parts'} ready about ${readyRange(C.lead)} if approved today (${C.lead[0]}–${C.lead[1]} working days)${C.slow ? `. ${C.slow} takes the longest, so it sets this date.${flatNote(C)}` : ''}`] : []),   // B124: one ready line for the order
     ...(last.warn.length && !G ? ['', 'Notes:', ...last.warn.map(w => '- ' + w)] : []), '',
