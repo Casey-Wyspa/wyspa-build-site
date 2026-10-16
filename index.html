@@ -876,7 +876,8 @@ function needFit(){
 }
 function needNote(){
   const f = needFit(), el = $('#needmsg');
-  el.textContent = f === 'sooner' ? "That's sooner than we can usually make it. Add a note and we'll ask the shop." : f === 'tight' ? "That's tight. We'll check with the shop." : f === 'ok' ? `That works: ready about ${readyRange(orderLead())}.` : '';
+  // c55: with card checkout on, an early date hides the card button (payUsd), so the line says what to do instead (plain-editor OK)
+  el.textContent = f === 'sooner' ? (CHECKOUT ? "That's sooner than we can usually make it. Press Send and we'll check the date, then send a pay link." : "That's sooner than we can usually make it. Add a note and we'll ask the shop.") : f === 'tight' ? "That's tight. We'll check with the shop." : f === 'ok' ? `That works: ready about ${readyRange(orderLead())}.` : '';
   el.hidden = !f;
 }
 // Phones: a bar pinned to the bottom shows the total while the form is on screen and the price box isn't.
@@ -990,6 +991,7 @@ function payUsd(){
   if (!CHECKOUT || !last || badSize && !ghost() || needSize || last.manual || last.units || kind === 'assembly') return 0;
   const C = combo(), fl = cadNames();
   // B176/B181: a typed part on another tab that has no instant price, or isn't in the total, means no card button.
+  if (needFit() === 'sooner') return 0;   // c55 WORST (open since c46): no card for an order the page just said it can't make by the buyer's date
   if (noRotorFile() || repeatOrd() || closedOv() ||[...typedParts].some(([k, e]) => k !== kind && (e.rv || e.nf || !C))) return 0;   // c43: a new rotor mold needs the buyer's file before card payment
   const t = C ? (fl.every(n => est.has(n)) ? Math.max(C.t, P.minOrder) : 0) : (last.only || fl.some(n => n !== pricedFile) ? 0 : last.total), r = Math.round(t);
   return isFinite(r) && r >= P.minOrder && r <= 50000 && usd(r) === $('#tot').textContent ? r : 0;
@@ -1043,8 +1045,8 @@ qf.addEventListener('input', e => { if (/^p[LW]$/.test(e.target.name) && kind ==
   if (e.target.name === 'pT' && kind === 'panel') thickNote(); if (/^m[LWH]$/.test(e.target.name)) inchNote(); render(); });
 // No past dates in Need by (B33).
 { const t = new Date(); $('#sf').elements.need.min = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; }
-$('#sf').elements.need.addEventListener('change', needNote);
-$('#sf').elements.need.addEventListener('input', needNote);
+$('#sf').elements.need.addEventListener('change', render);   // c55: the date can hide or show the card button, so redraw it all
+$('#sf').elements.need.addEventListener('input', render);
 qf.elements.pCore.addEventListener('change', e => {
   const t = qf.elements.pT;
   // Only replace the untouched 2 mm default. A typed or file thickness stays; if it's too thin, the price box asks "Is it in inches?" (B47).
