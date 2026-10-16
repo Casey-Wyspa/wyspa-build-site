@@ -85,6 +85,7 @@ window.WYSPA_PRICING = {
   // Molded parts: priced from envelope surface area, ply count and complexity
   molded: {
     materials: ["carbon", "prepreg", "glass", "hybrid"],
+    wallUnder: 0.05,   // B196 (2026-10-15): wall = nearest whole plies, but never more than 5% under the typed wall (then one more ply). Was: always rounded up. research/pricing/b196-molded-ply-rounding-2026-10-15.md
     complexity: {
       simple:  { label: "Open, depth up to half the width",   labor: 1.0, tool: 1.0 },
       medium:  { label: "Deep, or has flanges or inserts",    labor: 1.6, tool: 1.7 },
