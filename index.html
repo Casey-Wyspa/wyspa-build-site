@@ -963,9 +963,8 @@ function payUsd(){
 function setKind(k, byFile){
   // B99: a tab click goes back to the file last priced on that tab, with its own quantity and what was read from it.
   const t = !byFile && k !== kind && tabFile[k], f = t && t.f, back = f && cadNames().includes(f);
-  // B104: Flat or Molded with no file of its own takes the size of the 3D file just read, never the defaults (c49: unless it has a typed part).
-  const g = !byFile && !back && k !== kind && pricedFile && /^(panel|molded)$/.test(k) && !typedParts.has(k) && fileCtx.get(pricedFile)?.g, fo = g && [...$('#sf').elements.files.files].find(x => x.name === pricedFile);
-  if (fo && (g.H || g.T) > 0) return applyFile(k === 'panel' ? { ...g, kind: k, T: g.wall, m2: 0 } : { ...g, kind: k, H: g.H || g.T, wall: 0 }, fo, false, true);
+  // c50 #1: a tab click never moves a file to that tab or re-prices it. A file keeps the part type it got when dropped
+  // (a curved file dropped on Flat moves to Molded then, B107/B111). A tab with no file of its own shows its typed part.
   if (back) {
     const c = t.c;
     pricedFile = f; pricedKind = k; ({ fileSurf, fileGeo, fileSolid, unitEl, unitAs } = c);
