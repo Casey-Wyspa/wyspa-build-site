@@ -84,11 +84,12 @@
     // Each piece keeps its own box and length so a drawing frame can be told apart from the part inside it.
     const box = () => [Infinity, Infinity, -Infinity, -Infinity], grow = (b, c) => { b[0] = Math.min(b[0], c[0]); b[1] = Math.min(b[1], c[1]); b[2] = Math.max(b[2], c[2]); b[3] = Math.max(b[3], c[3]); };
     const all = [], shapes = [], segs = [];   // segs: open pieces (LINE, ARC, open polylines) to chain into loops
-    let cb;
-    const pt = (x, y) => grow(cb, [x, y, x, y]);
+    let cb, cp;   // cp: the piece's points in drawing order (c48: outline area for the set's weight)
+    const pt = (x, y) => { grow(cb, [x, y, x, y]); cp.push([x, y]); };
+    const shoe = p => { let s = 0; for (let k = 0; k + 1 < p.length; k++) s += p[k][0] * p[k + 1][1] - p[k + 1][0] * p[k][1]; return s; };   // twice the signed area, open path
     const arcPts = (cx, cy, r, a0, a1) => { let s = a1 - a0; if (s <= 0) s += 360; for (let t = 0; t <= 16; t++) { const a = (a0 + s * t / 16) * Math.PI / 180; pt(cx + r * Math.cos(a), cy + r * Math.sin(a)); } return r * s * Math.PI / 180; };
     for (const e of list) {
-      cb = box();
+      cb = box(); cp = [];
       let len = 0, closed = false, chain = null;
       if (e.type === 'LINE' && e.x.length) { pt(e.x[0], e.y[0]); pt(e.x2, e.y2); len = Math.hypot(e.x2 - e.x[0], e.y2 - e.y[0]); chain = [e.x[0], e.y[0], e.x2, e.y2]; }
       else if (e.type === 'CIRCLE') { closed = true; len = arcPts(e.x[0], e.y[0], e.r, 0, 360); }
@@ -111,7 +112,7 @@
             len += r * Math.abs(th);
           } else len += d;
         }
-        pt(e.x[n - 1], e.y[n - 1]);
+        if (!isClosed) pt(e.x[n - 1], e.y[n - 1]);   // a closed one already has it (no box change)
       } else if ((e.type === 'SPLINE' || e.type === 'ELLIPSE') && e.x.length) {
         for (let k = 0; k < e.x.length; k++) pt(e.x[k], e.y[k]);
         for (let k = 1; k < e.x.length; k++) len += Math.hypot(e.x[k] - e.x[k - 1], e.y[k] - e.y[k - 1]);
@@ -119,8 +120,9 @@
       }
       if (!isFinite(cb[0])) continue;
       const s = { bb: cb, len, closed, round: e.type === 'CIRCLE' };
+      if (closed) s.pa = e.type === 'CIRCLE' ? Math.PI * e.r * e.r : Math.abs(shoe([...cp, cp[0]])) / 2;
       all.push(s);
-      if (chain) segs.push([...chain, s]); else shapes.push(s);
+      if (chain) segs.push([...chain, s, cp]); else shapes.push(s);
     }
     const bb = box();
     all.forEach(s => grow(bb, s.bb));
@@ -134,13 +136,21 @@
       for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) { const id = nodes.get((gx + dx) + ',' + (gy + dy)); if (id != null) return id; }
       const id = par.length; par.push(id); deg.push(0); nodes.set(gx + ',' + gy, id); return id;
     };
-    const ends = segs.map(([x1, y1, x2, y2]) => { const a = node(x1, y1), b = node(x2, y2); deg[a]++; deg[b]++; par[find(a)] = find(b); return a; });
+    const endB = [], ends = segs.map(([x1, y1, x2, y2], k) => { const a = node(x1, y1), b = node(x2, y2); endB[k] = b; deg[a]++; deg[b]++; par[find(a)] = find(b); return a; });
     const open = new Set(par.map((_, k) => k).filter(k => deg[k] < 2).map(find)), groups = new Map();
     segs.forEach((g, k) => {
       const r = find(ends[k]);
-      if (!groups.has(r)) { groups.set(r, { bb: box(), len: 0, closed: !open.has(r) }); shapes.push(groups.get(r)); }
-      grow(groups.get(r).bb, g[4].bb); groups.get(r).len += g[4].len;
+      if (!groups.has(r)) { groups.set(r, { bb: box(), len: 0, closed: !open.has(r), ks: [] }); shapes.push(groups.get(r)); }
+      grow(groups.get(r).bb, g[4].bb); groups.get(r).len += g[4].len; groups.get(r).ks.push(k);
     });
+    // c48: a closed loop's own area (weight only): walk its pieces end to end, each turned to follow the loop. 0 if it branches.
+    groups.forEach(g => { if (!g.closed) return; const at = new Map();
+      g.ks.forEach(k => [ends[k], endB[k]].forEach(n => { if (!at.has(n)) at.set(n, []); at.get(n).push(k); }));
+      if ([...at.values()].some(v => v.length !== 2)) return;
+      const used = new Set(); let k = g.ks[0], fwd = true, n = endB[k], s = 0;
+      while (k != null && !used.has(k)) { used.add(k); s += shoe(fwd ? segs[k][5] : [...segs[k][5]].reverse());
+        const nk = at.get(n).find(x => !used.has(x)); if (nk == null) break; fwd = ends[nk] === n; n = fwd ? endB[nk] : ends[nk]; k = nk; }
+      if (used.size === g.ks.length) g.pa = Math.abs(s) / 2; });
     // No units in the file and a part this small: almost certainly drawn in inches.
     // B57: name the file's unit ("file says inches"), so the size can be shown in it.
     const un = { 1: 'inches', 2: 'feet', 4: 'mm', 5: 'cm', 6: 'm' }[uc];
@@ -183,10 +193,12 @@
     if (!set && part.bb === bb && loops.length) loops.splice(loops.indexOf(loops.reduce((a, s) => area(s) > area(a) ? s : a)), 1);
     // B146: each part's size in mm, long side first, largest part first.
     const parts = set && set.map(s => [s.bb[2] - s.bb[0], s.bb[3] - s.bb[1]].map(v => v * scale).sort((p, q) => q - p)).sort((p, q) => q[0] * q[1] - p[0] * p[1]);
+    // c48: the set's outline area in mm² (holes not taken off), for the weight only; a loop we couldn't trace counts its box.
+    const setA = set && set.reduce((t, s) => t + (s.pa > 0 ? Math.min(s.pa, area(s)) : area(s)), 0) * scale * scale;
     const round = Math.min(Math.max(0, holes), loops.filter(isRound).length);
     // B132: each hole's edge length (m), so the page doesn't charge a hole's edge twice (it's already in cutM).
     const holeM = loops.length === Math.max(0, holes) ? loops.map(s => s.len * scale / 1000) : null;
-    return { kind: 'panel', L: (x1 - x0) * scale, W: (y1 - y0) * scale, cutM: part.len * scale / 1000, holes: Math.max(0, holes), round, holeM, parts, units, inch: uc === 1 || scale === 25.4 && !uc };
+    return { kind: 'panel', L: (x1 - x0) * scale, W: (y1 - y0) * scale, cutM: part.len * scale / 1000, holes: Math.max(0, holes), round, holeM, parts, setA, units, inch: uc === 1 || scale === 25.4 && !uc };
   }
 
   // ---------- 3D meshes ----------
