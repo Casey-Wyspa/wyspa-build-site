@@ -612,10 +612,10 @@ const typedParts = new Map(), tLbl = k => $(`.tabs [data-k=${k}]`).textContent.t
 const others = (k = kind) => [...typedParts].filter(([t, e]) => t !== k && !e.rv).map(([, e]) => [e.name, e]);
 // c49: a typed flat part next to a file on the Flat tab. A file opened on Flat keeps the typed part there as 'panel*' (kk) with its
 // fields (v), so it stays in the order as its own item; its name in the price box opens it again. Only when the sizes differ by
-// over 25% (clearly another part); a file of about the same size replaces the typed part, as before, and says so.
+// over 5% (c51: was 25%; same band as B133's retyped size); a file within 5% of the typed size replaces it, and says so.
 const snap = k => [...fs(k).querySelectorAll('[name]')].map(el => [el.name, el.value, { ...el.dataset }]);
 const putSnap = (k, v) => v.forEach(([n, x, d]) => { const el = fs(k).querySelector(`[name="${n}"]`); if (!el) return; el.value = x; Object.keys(el.dataset).forEach(y => delete el.dataset[y]); Object.assign(el.dataset, d); });
-const far = (v, f) => v > 0 && f > 0 && Math.abs(v / f - 1) > 0.25;
+const far = (v, f) => v > 0 && f > 0 && Math.abs(v / f - 1) > 0.05;   // c51: same 5% band as B133 (near)
 let preEd = null;   // c49: the active Flat file's own entries before Length or Width is retyped (input), checked on change
 // B195: "Length 298.45 mm (typed 11 3/4 in)" lines for a tab's converted sizes (read while that tab is on screen), for every item in the email.
 const unitLines = k => k === 'assembly' ? [] : SIZES.map(n => fs(k).querySelector(`[name="${n}"]`)).filter(el => el && !el.closest('[hidden]')).map(el => [el, size(el)]).filter(([, r]) => r.typed)
@@ -631,7 +631,11 @@ const customTxt = () => [...(last && last.manual && !ghost() ? [[kind === 'assem
   ...customOthers()].map(([n, q, u]) => `${n} × ${q} (${u ? 'sizes to check' : 'custom quote'})`);
 // c48 #1: one line per custom-quote item in the priced tab's box: "Molded part: custom quote. We'll reply with a price."
 const customLines = () => customOthers().map(([n, , u]) => `${n.startsWith('your ') ? cap(n.slice(5)) : n}: ${u ? "we'll check the sizes" : "we'll reply with a price"}.`);   // plain-editor c48
-const filesPriced = () => cadNames().some(n => est.has(n)), ghost = () => !pricedFile && !!last && (filesPriced() || others().length > 0) && !touched[kind];
+// c51: a typed part with a size box cleared (no file on its tab) is out of the request, like an untouched tab: the other parts are
+// the order. A "Design for me" rotor stays in with no diameter (custom quote). Assembly and an unreadable size are unchanged.
+const blankTab = () => !pricedFile && kind !== 'assembly' && !(kind === 'rotor' && val('rGeo') === 'design')
+  && [...fs(kind).querySelectorAll('input')].some(el => SIZES.includes(el.name) && el.name !== 'mH' && !el.closest('[hidden]') && !el.value.trim());
+const filesPriced = () => cadNames().some(n => est.has(n)), ghost = () => !pricedFile && !!last && (filesPriced() || others().length > 0) && (!touched[kind] || blankTab());
 const noRotorFile = () => kind === 'rotor' && !pricedFile && val('rGeo') === 'new' && !ghost();   // c43: typed rotor, new mold, no file: estimate only, no card
 const combo = () => { const fl = cadNames().filter(n => est.has(n)), ot = others(); let it;
   if (pricedFile) { if (badSize || needSize || last.manual || !fl.includes(pricedFile) || fl.length + ot.length < 2 || fl.length > 1 && !last.only) return null; it = [...fl.map(n => [n, est.get(n)]), ...ot]; }
@@ -766,7 +770,7 @@ function applyFile(g, file, sketch, picked, re) {
   render();
   $('#cadmsg').textContent = fileSolid
     ? `From ${file.name}: ${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm (${g.units}). This looks like a closed or solid part (blade, foil, mast or tube). It needs a two-piece mold, so we price it by hand. Send it and we'll reply with a price.`
-    : `From ${file.name}: ${what}${kind === 'rotor' ? '' : ` (${g.units})`}.${moved ? (last.manual ? ' This part isn\'t flat, so it\'s a molded part.' : ' This part isn\'t flat, so we priced it as a molded part.') : ''}${toFlat ? (last.manual ? ' This part is flat, so it\'s a flat panel.' : ' This part is flat, so we priced it as a flat panel.') : ''}${g.parts && kind === 'panel' ? ` We found ${g.parts.length} parts in this file. We'll price them as one set. Quantity is how many sets you want. Length and Width show the whole layout${g.inch ? ` (${inch(g.L)} × ${inch(g.W)} in)` : ''}. Leave them as they are.` : ''}${newPart && !again && kind !== 'assembly' ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''}${kind === 'panel' && g.kind === 'panel' && g.pockets ? " Your file has pockets that don't go all the way through. We'll price this part by hand." : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
+    : `From ${file.name}: ${what}${kind === 'rotor' ? '' : ` (${g.units})`}.${moved ? (last.manual ? ' This part isn\'t flat, so it\'s a molded part.' : ' This part isn\'t flat, so we priced it as a molded part.') : ''}${toFlat ? (last.manual ? ' This part is flat, so it\'s a flat panel.' : ' This part is flat, so we priced it as a flat panel.') : ''}${g.parts && kind === 'panel' ? ` We found ${g.parts.length} parts in this file. We'll price them as one set. Quantity is how many sets you want. Length and Width show the whole layout${g.inch ? ` (${inch(g.L)} × ${inch(g.W)} in)` : ''}. Leave them as they are.` : ''}${newPart && !again && kind !== 'assembly' && (q => q.dataset.t || q.value !== q.defaultValue)(fs(kind).querySelector('[name=qty]')) ? ` Quantity is still ${val('qty')} from your last part. Change it if needed.` : ''}${noT ? ` Your file has no thickness, so ${tMsg}.` : ''}${kind === 'molded' && !g.wall ? ` Your file has no wall thickness, so it's set to ${val('mWall')} mm.` : ''}${kind === 'panel' && g.kind === 'panel' && g.pockets ? " Your file has pockets that don't go all the way through. We'll price this part by hand." : ''} Check ${noT ? 'all fields' : 'the fields'}, then send. Your file is attached.${kind === 'molded' ? ' We guessed the shape from your file. Change it if it\'s wrong or the part has flanges or inserts.' : ''}`;
   ctx.msg = $('#cadmsg').textContent.replace(QNOTE, '');
   if (tp) $('#cadmsg').textContent += keepTp ? ' The flat panel you typed stays as its own part.' : ' This file replaces the flat panel you typed.';
   if (again && kind === 'molded') inchNote();   // B172: restored inch sizes read the file in inches again (B147)
@@ -946,13 +950,13 @@ function draw(){
   // stock catalog items; carbon + glass sheet isn't, so no line for it.
   const fit2 = noFile && !holes && val('pCore') !== 'core' && val('pMat') !== 'hybrid' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
     : kind === 'rotor' && val('rGeo') === 'new' ? ["A stock-size prop usually costs less from a catalog. We're best for custom rotors."] : [];
-  $('#warn').innerHTML = [...(kind === 'rotor' ? [rotorNote()] : []), ...(CHECKOUT && noRotorFile() ? ["Add your rotor file to pay by card. No file? Press Send and we'll reply."] : []), ...(CHECKOUT && repeatOrd() ? [repeatNote()] : []), ...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...((last.only || C) && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin && !C ? [`Every order is at least ${usd(P.minOrder)}.${cl.length ? '' : last.fit > last.q ? (last.sets > 1 ? ` That covers up to ${last.fit} sets, so you can add more at no extra cost.` : ` That covers ${last.fit} of this part, so you can add more at no extra cost.`) : ''}${typed && !cl.length ? ' More than one part? Send each one. We\'ll price them together as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+  $('#warn').innerHTML = [...(kind === 'rotor' ? [rotorNote()] : []), ...(CHECKOUT && noRotorFile() ? ["Add your rotor file to pay by card. No file? Press Send and we'll reply."] : []), ...(CHECKOUT && repeatOrd() ? [repeatNote()] : []), ...(last.wt ? [last.wt] : []), ...plain, ...fit2, ...last.warn, ...((last.only || C) && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)} across all files.`] : []), ...(last.belowMin && !C ? [`Every order is at least ${usd(P.minOrder)}.${cl.length ? '' : last.fit > last.q ? (last.sets > 1 ? ` That covers up to ${last.fit} sets, so you can add more at no extra cost.` : ` That covers ${last.fit} of this part, so you can add more at no extra cost.`) : ''}${typed && !cl.length ? ' Have more parts? Add them here and we\'ll price them as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 // The card button shows only for one firm instant number covering the whole request: no custom quote, no "Check your sizes",
 // no file still waiting for a price, and the same dollars as the big number on screen. $1,500 to $50,000, as the intake script checks.
 function payUsd(){
-  if (!CHECKOUT || !last || badSize || needSize || last.manual || last.units || kind === 'assembly') return 0;
+  if (!CHECKOUT || !last || badSize && !ghost() || needSize || last.manual || last.units || kind === 'assembly') return 0;
   const C = combo(), fl = cadNames();
   // B176/B181: a typed part on another tab that has no instant price, or isn't in the total, means no card button.
   if (noRotorFile() || repeatOrd() || [...typedParts].some(([k, e]) => k !== kind && (e.rv || e.nf || !C))) return 0;   // c43: a new rotor mold needs the buyer's file before card payment
@@ -979,6 +983,8 @@ function setKind(k, byFile){
   if (!byFile && !back && !pricedFile && filesPriced()) $('#cadmsg').textContent = touched[k] ? JOINED : GHOST_MSG;
   // B176: name the typed parts from the other tabs that are still in the request.
   const ot = !byFile && !back && !pricedFile && [...typedParts].filter(([t, e]) => t !== k && !e.kk).map(([, e]) => e);   // c49: a kept part is named in the price box
+  // c51: no typed part left on another tab: drop that tab's "from the other tab" line (it named the part now on screen).
+  if (ot && !ot.length && / from the other tabs? (is|are) in this request too\./.test($('#cadmsg').textContent)) $('#cadmsg').textContent = '';
   if (ot && ot.length) { const rv = ot.filter(e => e.rv).map(e => e.lbl), and = a => a.join(' and ');
     $('#cadmsg').textContent = `Your ${and(ot.map(e => e.lbl))} from the other tab${ot.length > 1 ? 's are' : ' is'} in this request too.${rv.length ? ` We'll price the ${and(rv)} by hand.` : ''} To leave ${ot.length > 1 ? `one out, clear its ${ot.some(e => e.k === 'assembly') ? 'sizes or description' : 'sizes'} on that tab` : `it out, clear its ${ot[0].k === 'assembly' ? 'description' : 'sizes'} on that tab`}.`; }   // B200
   // B137: each tab keeps its own quantity on a tab click (typed plates x100 and a cover x10 no longer overwrite each other).
@@ -1015,7 +1021,7 @@ qf.elements.pCore.addEventListener('change', e => {
 });
 qf.elements.pT.addEventListener('input', e => { delete e.target.dataset.bump; });
 qf.elements.pSkin.addEventListener('input', e => { e.target.dataset.typed = 1; });   // c48 #6: typed outer layers are never swapped for thinner ones
-// c49: Length or Width retyped over 25% away from the Flat file's own size is a new typed part. The file keeps its own item as it
+// c49: Length or Width retyped over 5% (c51: was 25%) away from the Flat file's own size is a new typed part. The file keeps its own item as it
 // was before the retype (sizes, quantity, thickness, holes); the typed part starts with no holes. A unitless file retyped in the
 // other unit (x or ÷ 25.4) and smaller changes stay with the file, as before (B133, B145).
 qf.addEventListener('change', e => { const n = e.target.name, s = preEd; if (!/^p[LW]$/.test(n)) return; preEd = null;
