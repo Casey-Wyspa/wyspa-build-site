@@ -54,7 +54,10 @@ window.WYSPA_PRICING = {
     // A core is charged as the first sheet at least as thick; over 31.75 mm, the cheapest two sheets plus one bond line (bondM2). Thinnest stock is 1/8 in (3.2 mm).
     // H80 foam 80 kg/m³ plus about 0.3 kg/m² bond resin (laminate engine); weight uses the core thickness itself.
     core: { label: "Foam core", stock: [[3.175, 36], [6.35, 54], [9.525, 77], [12.7, 95], [15.875, 110], [19.05, 133], [25.4, 165], [31.75, 201]], bondM2: 12,
-            hrPerM2: 0.4, minT: 3, density: 80, bondKgM2: 0.3 },
+            hrPerM2: 0.4, minT: 3, density: 80, bondKgM2: 0.3,
+            seal: { hrPerM: 0.04, hrPerPart: 0.05, usdPerM2Edge: 129 },   // cut foam edges filled and sanded flush: aPriori paste 0.1 m/s + NREL hand trim 30 m/h + 3 min handling; 3 mm fill x 1.08 g/cm³ x $39.81/kg. research/pricing/core-edges-inserts-2026-10-16.md
+            pot:  { hr: 0.15, usdPerMm: 0.22 },   // per hole through the core: Dzus US3964531 10 min/insert (aPriori 40 s potting step only); aPriori 80 mm potted cylinder x core mm, epoxy $39.81/kg
+          },
     finish: {
       matte: { label: "Matte", perM2: 0,  hrPerM2: 0 },
       gloss: { label: "Gloss one side",   perM2: 15, hrPerM2: 0.6 },

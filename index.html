@@ -391,6 +391,14 @@ function calc(){
     const hl = fsc && fileGeo.holes === holes && fileGeo.holeM && fileGeo.holeM.map(m => m * fsc);
     const holeHr = hl ? hl.reduce((t, m) => t + Math.max(0, C.hrPerHole - m * C.hrPerMCut), 0) : holes * C.hrPerHole;
     hr = a * (n * C.hrPerM2Ply + (C.bagHrPerM2 || 0) + f.hrPerM2 +(cored ? C.core.hrPerM2 : 0)) + C.hrPerPart * nP + cutM * C.hrPerMCut + holeHr;
+    // c50: foam core only. Round holes are potted (file: its round holes; typed: every hole); the cut foam edge is sealed.
+    // A file's hole edges come off the sealed length only when all its holes are round (holeM doesn't say which loop is round).
+    const potN = cored ? (fsc && fileGeo.holes === holes ? fileGeo.round || 0 : holes) : 0, cT = Math.max(coreT, 0);
+    if (cored) {
+      const sealM = Math.max(0, cutM - (hl && potN === holes ? hl.reduce((t, m) => t + m, 0) : 0)), S = C.core.seal, Pt = C.core.pot;
+      hr += sealM * S.hrPerM + S.hrPerPart * nP + potN * Pt.hr;
+      mat += sealM * cT / 1000 * S.usdPerM2Edge + potN * cT * Pt.usdPerMm;
+    }
     mat += cons(a, hr);
     setup = price(C.setupHours, 0); lead = P.leadDays.panel;
     const [mx, my] = C.maxSize;
@@ -418,7 +426,7 @@ function calc(){
     const rv = review.length > 0;
     // B1: the stack we build, when it differs from the typed thickness by 0.05 mm or more; fabric gsm of the plies used.
     const bTxt = Math.abs(lm1.mm - (cored ? skin : T)) >= 0.05 ? `builds ${+lm1.mm.toFixed(2)} mm, ` : '', gsmB = Math.round(lm1.f * m.gsm + lm1.nb * (m.bulk ? m.bulk.gsm : 0));
-    spec.push(`${set ? `Set of ${nP} flat panels from one file (${set.map(p => p.map(Math.round).join(' × ')).join(', ')} mm), ${T} mm` : `Flat panel ${L} × ${W} × ${T} mm`} total, ${m.label}, ${cored ? `${skin} mm skins${rv ? '' : ` (${bTxt}about ${gsmB} gsm each)`}${coreT > 0 ? ` on ${+coreT.toFixed(1)} mm foam core` : ''}` : `solid${rv ? '' : ` (${bTxt}about ${gsmB} gsm)`}`}, ${f.label}, ${holeTxt(holes, fsc && fileGeo.holes === holes ? fileGeo.round : null)}${pkt ? `, ${pkt}` : ''}, ${cutM.toFixed(1)} m of cutting${set ? ' per set' : ''}`);
+    spec.push(`${set ? `Set of ${nP} flat panels from one file (${set.map(p => p.map(Math.round).join(' × ')).join(', ')} mm), ${T} mm` : `Flat panel ${L} × ${W} × ${T} mm`} total, ${m.label}, ${cored ? `${skin} mm skins${rv ? '' : ` (${bTxt}about ${gsmB} gsm each)`}${coreT > 0 ? ` on ${+coreT.toFixed(1)} mm foam core` : ''}` : `solid${rv ? '' : ` (${bTxt}about ${gsmB} gsm)`}`}, ${f.label}, ${holeTxt(holes, fsc && fileGeo.holes === holes ? fileGeo.round : null)}${pkt ? `, ${pkt}` : ''}, ${cutM.toFixed(1)} m of cutting${set ? ' per set' : ''}${cored ? `, edges sealed${potN ? ', holes filled for bolts' : ''}` : ''}`);
     sets = nP;
   } else if (kind === 'rotor') {
     const D = val('rD'), B = val('rB'), m = P.plies[val('rMat')], geo = val('rGeo'), R = P.rotor, bm = R.bladeMult[B];
