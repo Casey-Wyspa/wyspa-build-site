@@ -198,10 +198,10 @@ html,body{margin:0;background:#eef2f3}
     <label>Length (mm or in)<input type="text" name="mL" value="500"></label>
     <label>Width (mm or in)<input type="text" name="mW" value="300"></label>
     <label>Depth (mm or in)<input type="text" name="mH" value="80"></label>
-    <label>Wall thickness (mm or in)<input type="text" name="mWall" value="1"></label>
+    <label>Wall thickness (mm or in)<input type="text" name="mWall" value="1 mm"></label>
     <label>Material<select name="mMat"></select></label>
     <label>Mold<select name="mTool"><option value="new">Make a new mold</option><option value="have">Repeat order (you have my mold)</option></select></label>
-    <label class="full">Shape<select name="mCx"></select></label>
+    <label class="full">Shape<select name="mCx"></select><span class="cv" style="color:var(--muted)">Solid or closed part (blade, fin, foil)? Pick Closed or hollow.</span></label>
     <label>Quantity<input type="number" name="qty" value="5" min="1" step="1"></label>
    </fieldset>
    <fieldset data-k="assembly" hidden>
@@ -1007,7 +1007,7 @@ function summary(){
     ...(last.warn.length && !G ? ['', 'Notes:', ...last.warn.map(w => '- ' + w)] : []), '',
     `Name: ${s.name.value}`, `Company: ${s.org.value}`, `Email: ${s.email.value}`, `Need by: ${s.need.value || 'flexible'}${({ sooner: ' (before our lead time, check with shop)', tight: ' (tight, check with shop)' })[needFit()] || ''}`,
     `Application and loads: ${s.notes.value}`, '', UPLOAD_URL ? '' : '[Attach CAD / drawings / sketch]'
-  ].join('\n');
+  ].join('\n').replace(/^([^\n]*\n)\n+/, '$1\n');   // c46: an untouched tab (G) left extra blank lines under the title
 }
 window.wyspaSummary = summary;   // read-only hook so scripts/shopper.mjs can check the email text without sending
 const mailto = () => {
