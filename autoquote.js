@@ -453,7 +453,12 @@
     const rings = new Set([...parent.keys()].map(find)).size, cutM = side / T * s / 1000;
     if (!rings || rings > 500 || !isFinite(cutM)) return {};
     const pk = pockets(t, ax, T, s, q, key, find, sideAt, other);
-    return pk ? { holes: pk.holes, cutM: pk.cutM, pockets: pk.depths } : { holes: rings - 1, cutM };
+    if (pk) return { holes: pk.holes, cutM: pk.cutM, pockets: pk.depths };
+    // c58 (B132 for 3D files): each hole's or cutout's own edge length (its ring of side wall ÷ thickness, in m), the outline
+    // (the longest ring) left out, so a hole pays the larger of hrPerHole and its edge, not both, exactly like a DXF hole.
+    const ra = new Map(); sideAt.forEach(([i, a]) => { const r = find(key(i)); ra.set(r, (ra.get(r) || 0) + a); });
+    const per = [...ra.values()].map(a => a / T * s / 1000).sort((a, b) => b - a), holeM = per.length === rings ? per.slice(1) : null;
+    return { holes: rings - 1, cutM, holeM };
   }
 
   // B192: a pocket, recess or blind hole that doesn't go all the way through is not a hole. Join every face except the plate's
