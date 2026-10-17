@@ -182,7 +182,7 @@ html,body{margin:0;background:#eef2f3}
     <label id="pSkinL" hidden>Outer layers, each side (mm or in)<input type="text" name="pSkin" value="1 mm"></label>
     <label>Finish<select name="pFin"></select></label>
     <label>Holes and cutouts per panel<input type="number" name="pHoles" value="0" min="0" step="1"></label>
-    <label>Quantity<input type="number" name="qty" value="10" min="1" step="1"></label>
+    <label>Quantity<input type="text" inputmode="numeric" autocomplete="off" name="qty" value="10"></label>
    </fieldset>
    <fieldset data-k="rotor" hidden>
     <label>Diameter (in or mm)<input type="text" name="rD" value="15"></label>
@@ -193,7 +193,7 @@ html,body{margin:0;background:#eef2f3}
      <option value="repeat">Repeat order (you have my mold)</option>
      <option value="design">Design the rotor for me</option>
     </select></label>
-    <label>Quantity<input type="number" name="qty" value="8" min="1" step="1"></label>
+    <label>Quantity<input type="text" inputmode="numeric" autocomplete="off" name="qty" value="8"></label>
    </fieldset>
    <fieldset data-k="molded" hidden>
     <label>Length (mm or in)<input type="text" name="mL" value="500"></label>
@@ -203,12 +203,12 @@ html,body{margin:0;background:#eef2f3}
     <label>Material<select name="mMat"></select></label>
     <label>Mold<select name="mTool"><option value="new">Make a new mold</option><option value="have">Repeat order (you have my mold)</option></select></label>
     <label class="full">Shape<select name="mCx"></select><span class="cv" style="color:var(--muted)">Solid or closed part (blade, fin, foil)? Pick Closed or hollow.</span></label>
-    <label>Quantity<input type="number" name="qty" value="5" min="1" step="1"></label>
+    <label>Quantity<input type="text" inputmode="numeric" autocomplete="off" name="qty" value="5"></label>
    </fieldset>
    <fieldset data-k="assembly" hidden>
     <label class="full">What is it?<textarea name="aDesc" rows="4" placeholder="The parts, how they join, and what it has to do."></textarea></label>
     <label>Overall size (mm or in)<input type="text" name="aSize" placeholder="L × W × H"></label>
-    <label>Quantity<input type="number" name="qty" value="1" min="1" step="1"></label>
+    <label>Quantity<input type="text" inputmode="numeric" autocomplete="off" name="qty" value="1"></label>
    </fieldset>
   </form>
 
@@ -305,7 +305,9 @@ function size(el){
   // B131: a bare fraction is read as inches; the email says so instead of claiming "in" was typed.
   return { v, typed, imp: u === 'in', said: said || m[5] ? `typed ${typed}` : `you typed ${raw}, we read it as inches`, note: `${typed} = ${v} ${fu}` };
 }
-const val = n => { const el = fs(kind).querySelector(`[name="${n}"]`); return el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.value : SIZES.includes(n) ? size(el).v : parseFloat(el.value); };
+// c56: a whole quantity, "1,000" too; 2.5, 0 or blank is no quantity (it was priced as 3).
+const qtyN = el => { const t = el.value.trim(); return /^\d+$|^\d{1,3}(,\d{3})+$/.test(t) ? +t.replace(/,/g, '') : NaN; };
+const val = n => { const el = fs(kind).querySelector(`[name="${n}"]`); return el.type === 'checkbox' ? el.checked : el.tagName === 'SELECT' ? el.value : SIZES.includes(n) ? size(el).v : n === 'qty' ? qtyN(el) : parseFloat(el.value); };
 SIZES.forEach(n => qf.querySelector(`[name="${n}"]`).insertAdjacentHTML('afterend', '<span class="cv"></span>'));
 // A bare number the buyer typed (not from a file) that is too small to be mm: "Is it in inches? Type 10 in." (B36).
 const typedIn = n => { const el = fs(kind).querySelector(`[name="${n}"]`); return size(el).bare && el.value !== el.dataset.f ? ` Type ${el.value.trim()} in.` : ''; };
@@ -551,7 +553,7 @@ function calc(){
   const nb = P.qtyBreaks.find(b => b.min > q), capped = nb && price(hr * qtyMult(nb.min), mat) * nb.min < price(hr * lm, mat) * q;
   if (capped) warn.push(`Same total as ${nb.min} parts.`);
   // Several CAD files attached, but the price is for one (B25).
-  const cad = cadNames();
+  const cad = cadNames().filter(n => readFiles.has(n));   // c56: a Files-box reference copy is never priced, so it doesn't make this "one of several"
   const only = cad.length > 1 && cad.includes(pricedFile) ? pricedFile : '';
   const unitP = capped ? price(hr * qtyMult(nb.min), mat) * nb.min / q : price(hr * lm, mat), lines = [
     // B29: show the volume discount on screen, not just in the emailed spec.
@@ -644,7 +646,8 @@ const blankTab = () => !pricedFile && kind !== 'assembly' && !(kind === 'rotor' 
 // fills, the foam-core bump, Use inches/mm and file reads don't). Retyping "600" counts. A "Design for me" rotor counts.
 const SZK = { panel: ['pL', 'pW', 'pT'], molded: ['mL', 'mW', 'mH', 'mWall'], rotor: ['rD'] }, szTyped = {};
 const defSize = k => !!SZK[k] && !szTyped[k] && !(k === 'rotor' && fs(k).querySelector('[name=rGeo]').value === 'design');
-const filesPriced = () => cadNames().some(n => est.has(n)), ghost = () => !pricedFile && !!last && (filesPriced() || others().length > 0) && (!touched[kind] || blankTab() || defSize(kind));
+const filesPriced = () => cadNames().some(n => est.has(n)), ghost = () => !pricedFile && !!last && (filesPriced() || others().length > 0) && (!touched[kind] || blankTab() || defSize(kind) || kind !== 'assembly' && qBad());
+const qBad = () => !(qtyN(fs(kind).querySelector('[name=qty]')) >= 1);   // c56: 0, blank or 2.5 in the editor: that part is out, the saved parts' total stays
 // c43: typed rotor, new mold, no file: estimate only, no card. c53: a typed molded part with a new mold and no file too.
 const noRotorFile = () => /^(rotor|molded)$/.test(kind) && !pricedFile && fs(kind).querySelector(kind === 'rotor' ? '[name=rGeo]' : '[name=mTool]').value === 'new' && !ghost();
 const noFileTxt = k => `Add your ${k === 'rotor' ? 'rotor' : 'part'} file to pay by card. No file? Press Send and we'll reply.`;
@@ -825,11 +828,12 @@ const noSend = name => `We can't take .${name.split('.').pop().toLowerCase()} fi
 $('#sf').elements.files.addEventListener('change', e => {
   // B95: the refusal sits under the Files box and stays until the files change.
   const fi = e.target, bad = [...fi.files].filter(f => !canSend(f.name));
-  $('#filemsg').textContent = bad.length ? noSend(bad[0].name) : '';
-  if (!bad.length) return;
-  const dt = new DataTransfer();
-  [...fi.files].filter(f => canSend(f.name)).forEach(f => dt.items.add(f));
-  fi.files = dt.files;
+  const ref = [...fi.files].find(f => /\.(dxf|stp|step|igs|iges|stl|3dm)$/i.test(f.name) && !readFiles.has(f.name));   // c56: Files-box CAD is sent, never read
+  $('#filemsg').textContent = bad.length ? noSend(bad[0].name) : ref ? `${ref.name}: attached, not priced. To price it, drop it in the box above.` : '';
+  if (bad.length) { const dt = new DataTransfer();
+    [...fi.files].filter(f => canSend(f.name)).forEach(f => dt.items.add(f));
+    fi.files = dt.files; }
+  if (last) render();   // c56: the price box and card button see the files now, not at the next keystroke
 });
 window.WB = { applyFile, canSend, noSend };
 // B199: offer "Use inches" only when the mm reading looks wrong (longest side under 60 mm, as autoquote.js, or a wall or thickness
@@ -868,16 +872,19 @@ const readyRange = L => { const [a, b] = readyDates(L); return `${shortDate(a)}�
 // so the check uses it with the other priced files' dates.
 const orderLead = () => (ghost() || !last.manual) && combo()?.lead || (last.manual ? [0, 1].map(i => Math.max(last.lead[i], ...cadNames().filter(n => n !== pricedFile && est.has(n)).map(n => est.get(n).lead[i]), ...others().map(x => x[1].lead[i]))) : last.lead);
 function needFit(){
-  const v = $('#sf').elements.need.value;
+  const v = $('#sf').elements.need.value, [y, m, dd] = v.split('-').map(Number), need = new Date(y, m - 1, dd), now = new Date();
+  if (v && need < new Date(now.getFullYear(), now.getMonth(), now.getDate())) return 'past';   // c56: a date before today
   const G = ghost();   // B171: an untouched typed tab: the files' order date, whatever the tab's defaults say
   if (!v || !last || !G && (badSize || needSize || last.units || !last.lead || !last.lead.every(isFinite))) return '';
-  const [y, m, dd] = v.split('-').map(Number), need = new Date(y, m - 1, dd), [a, b] = readyDates(orderLead());
-  return need < a ? 'sooner' : need < b ? 'tight' : last.manual && !G ? '' : 'ok';   // B161: 'ok' = the date fits an instant price (custom quotes say nothing)
+  // c56 WORST: "ready" = leaves the shop, so a date that works is 7+ calendar days after the last ready day (shipping);
+  // anything from the first ready day up to then is 'tight', and 'tight' hides the card like 'sooner' (payUsd).
+  const [a, b] = readyDates(orderLead()), ship = new Date(b.getFullYear(), b.getMonth(), b.getDate() + 7);
+  return need < a ? 'sooner' : need < ship ? 'tight' : last.manual && !G ? '' : 'ok';   // B161: 'ok' = the date fits an instant price (custom quotes say nothing)
 }
 function needNote(){
   const f = needFit(), el = $('#needmsg');
   // c55: with card checkout on, an early date hides the card button (payUsd), so the line says what to do instead (plain-editor OK)
-  el.textContent = f === 'sooner' ? (CHECKOUT ? "That's sooner than we can usually make it. Press Send and we'll check the date, then send a pay link." : "That's sooner than we can usually make it. Add a note and we'll ask the shop.") : f === 'tight' ? "That's tight. We'll check with the shop." : f === 'ok' ? `That works: ready about ${readyRange(orderLead())}.` : '';
+  el.textContent = f === 'sooner' ? (CHECKOUT ? "That's sooner than we can usually make it. Press Send and we'll check the date, then send a pay link." : "That's sooner than we can usually make it. Add a note and we'll ask the shop.") : f === 'tight' ? (CHECKOUT ? "That's tight. Press Send and we'll check the date, then send a pay link." : "That's tight. We'll check with the shop.") : f === 'past' ? 'That date has passed. Pick a later one.' : f === 'ok' ? `That works: ready about ${readyRange(orderLead())}.` : '';
   el.hidden = !f;
 }
 // Phones: a bar pinned to the bottom shows the total while the form is on screen and the price box isn't.
@@ -894,7 +901,7 @@ function draw(){
   $('#pSkinL').hidden = fs('panel').querySelector('[name=pCore]').value !== 'core';
   last = calc();
   // Empty, zero or negative sizes (common while retyping on a phone): no price, never $NaN or a negative part price.
-  const badQty = !(parseFloat(fs(kind).querySelector('[name=qty]').value) >= 1);
+  const badQty = qBad();
   // Show "1/8 in = 3.2 mm" under a field only when its unit was converted.
   // B128: a size we can't read says so under its field, not only "Fill in the size".
   SIZES.forEach(n => { const el = qf.querySelector(`[name="${n}"]`), r = size(el), t = el.value.trim();
@@ -925,7 +932,7 @@ function draw(){
     $('#tot').textContent = usd(Math.max(G.t, P.minOrder));
     $('#per').innerHTML = `${G.it.map(([n, e]) => `${fLink(n, e)} × ${qS(e)}: ${usd(e.sub - R)}${rmL(e)}`).join(' + ')} + ${usd(R)} part check (once per order)${shOut(G)}${lo ? ` + ${usd(P.minOrder - G.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(G.lead)} if you approve today${G.slow ? `. ${esc(G.slow)} takes the longest, so it sets this date.${flatNote(G)}` : ''}${cl.map(l => `\n<div>${esc(l)}</div>`).join('')}`;   // B173: file names are links
     $('#lines').innerHTML = [...G.it.map(([n, e]) => [`Subtotal for ${n}`, e.sub - R]), ['Part check (once per order)', R], ...shRow(G), ...(lo ? [[`Minimum order (${usd(P.minOrder)})`, P.minOrder - G.t]] : [])].map(l => `<tr><td>${l[0]}</td><td class="n">${usdS(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Total</td><td class="n">${usd(Math.max(G.t, P.minOrder))}</td></tr>`;
-    $('#warn').innerHTML = [...(CHECKOUT && noFileKind() ? [noFileTxt(noFileKind())] : []), ...(CHECKOUT && closedOv() ? [CLOSED_TXT] : [])].map(w => `<div>${w}</div>`).join('\n');   // c53/c54: say why there's no card button
+    $('#warn').innerHTML = [...(kind !== 'assembly' && qBad() && touched[kind] ? ['Enter a whole number, 1 or more, to add this part.'] : []), ...(CHECKOUT && noFileKind() ? [noFileTxt(noFileKind())] : []), ...(CHECKOUT && closedOv() ? [CLOSED_TXT] : [])].map(w => `<div>${w}</div>`).join('\n');   // c53/c54: say why there's no card button
     return;
   }
   if (badSize) {
@@ -991,7 +998,7 @@ function payUsd(){
   if (!CHECKOUT || !last || badSize && !ghost() || needSize || last.manual || last.units || kind === 'assembly') return 0;
   const C = combo(), fl = cadNames();
   // B176/B181: a typed part on another tab that has no instant price, or isn't in the total, means no card button.
-  if (needFit() === 'sooner') return 0;   // c55 WORST (open since c46): no card for an order the page just said it can't make by the buyer's date
+  if (/^(sooner|tight)$/.test(needFit())) return 0;   // c56: 'tight' too. c55 WORST (open since c46): no card for an order the page just said it can't make by the buyer's date
   if (noRotorFile() || repeatOrd() || closedOv() ||[...typedParts].some(([k, e]) => k !== kind && (e.rv || e.nf || !C))) return 0;   // c43: a new rotor mold needs the buyer's file before card payment
   const t = C ? (fl.every(n => est.has(n)) ? Math.max(C.t, P.minOrder) : 0) : (last.only || fl.some(n => n !== pricedFile) ? 0 : last.total), r = Math.round(t);
   return isFinite(r) && r >= P.minOrder && r <= 50000 && usd(r) === $('#tot').textContent ? r : 0;
@@ -1017,9 +1024,12 @@ function setKind(k, byFile){
   // B176: name the typed parts from the other tabs that are still in the request.
   const ot = !byFile && !back && !pricedFile && [...typedParts].filter(([t, e]) => t !== k && !e.kk).map(([, e]) => e);   // c49: a kept part is named in the price box
   // c51: no typed part left on another tab: drop that tab's "from the other tab" line (it named the part now on screen).
-  if (ot && !ot.length && / from the other tabs? (is|are) in this request too\./.test($('#cadmsg').textContent)) $('#cadmsg').textContent = '';
-  if (ot && ot.length) { const rv = ot.filter(e => e.rv).map(e => e.lbl), and = a => a.join(' and ');
-    $('#cadmsg').textContent = `Your ${and(ot.map(e => e.lbl))} from the other tab${ot.length > 1 ? 's are' : ' is'} in this request too.${rv.length ? ` We'll price the ${and(rv)} by hand.` : ''} To leave ${ot.length > 1 ? `one out, clear its ${ot.some(e => e.k === 'assembly') ? 'sizes or description' : 'sizes'} on that tab` : `it out, clear its ${ot[0].k === 'assembly' ? 'description' : 'sizes'} on that tab`}.`; }   // B200
+  // c56: saved parts ("+ Add another part") count too, so two flat panels read "2 flat panels ... are"; they leave with "remove".
+  const sv = ot ? [...typedParts.values()].filter(e => e.add && e.k !== k) : [], al = ot ? [...ot, ...sv] : [];
+  if (ot && !al.length && / from the other tabs? (is|are) in this request too\./.test($('#cadmsg').textContent)) $('#cadmsg').textContent = '';
+  if (al.length) { const rv = ot.filter(e => e.rv).map(e => e.lbl), and = a => a.join(' and '), n = l => al.filter(e => e.lbl === l).length, m = al.length > 1;
+    const clr = ot.length ? `clear its ${ot.some(e => e.k === 'assembly') ? (ot.length > 1 ? 'sizes or description' : 'description') : 'sizes'} on that tab` : '';
+    $('#cadmsg').textContent = `Your ${and([...new Set(al.map(e => e.lbl))].map(l => n(l) > 1 ? `${n(l)} ${l}s` : l))} from the other tab${new Set(al.map(e => e.k)).size > 1 ? 's' : ''} ${m ? 'are' : 'is'} in this request too.${rv.length ? ` We'll price the ${and(rv)} by hand.` : ''} To leave ${m ? 'one' : 'it'} out, ${sv.length ? `press remove in the price box${clr ? ` or ${clr}` : ''}` : clr}.`; }   // B200
   // B137: each tab keeps its own quantity on a tab click (typed plates x100 and a cover x10 no longer overwrite each other).
   // Only an uploaded file that moves to another tab carries the quantity on screen with it (B89).
   const q0 = kind && fs(kind) && fs(kind).querySelector('[name=qty]'), q1 = fs(k).querySelector('[name=qty]');
@@ -1085,16 +1095,21 @@ function canAdd(){ const e = typedParts.get(kind);
   return !!e && !e.rv && !pricedFile && !ghost() && /^(panel|molded)$/.test(kind) && !!szTyped[kind]; }   // c53: a size the buyer typed, even the default "600"
 function renum(k){ let i = 0; typedParts.forEach(e => { if (e.add && e.k === k) e.name = `your ${tLbl(k)} #${++i}`; }); const live = typedParts.get(k); if (live) live.name = tName(k); }
 function unadd(kk){ const e = typedParts.get(kk); if (!e || !e.add) return; typedParts.delete(kk); renum(e.k);
-  if (/^Added: /.test($('#cadmsg').textContent)) $('#cadmsg').textContent = ''; render(); }
+  if (/^Added/.test($('#cadmsg').textContent)) $('#cadmsg').textContent = ''; render(); }
 // "24 × 16 × 3/8 in" as typed (one unit at the end when all sizes share it), "600 × 400 × 2 mm" for bare mm.
 const typedSize = k => { const p = (k === 'panel' ? ['pL', 'pW', 'pT'] : ['mL', 'mW', 'mH']).map(n => fs(k).querySelector(`[name="${n}"]`)).filter(el => el.value.trim()).map(el => {
     const r = size(el), t = r.typed || `${r.v} mm`, m = t.match(/^(.*) (mm|cm|in)$/); return m ? [m[1], m[2]] : [t, '']; });
   return p.every(x => x[1] && x[1] === p[0][1]) ? `${p.map(x => x[0]).join(' × ')} ${p[0][1]}` : p.map(x => x.join(' ').trim()).join(' × '); };
+// c56: the same part saved again (every field but quantity) adds its quantity to the saved line, so 2 × 6 costs what 1 × 12 does.
+const noQty = v => JSON.stringify(v.filter(x => x[0] !== 'qty').map(x => [x[0], String(x[1]).trim()]));
 $('#addp').onclick = () => { const k = kind, e = typedParts.get(k); if (!canAdd()) return;
   const what = `${typedSize(k)} ${k === 'panel' ? (val('pCore') === 'core' ? 'foam-core panel' : 'flat panel') : 'molded part'}`;
-  typedParts.delete(k); typedParts.set(`${k}+${++addN}`, { ...e, kk: `${k}+${addN}`, add: 1, v: snap(k) });
-  putSnap(k, DEF[k]); delete touched[k]; delete szTyped[k]; renum(k); render();
-  $('#cadmsg').textContent = `Added: ${what} × ${e.q}. Type the next part.`;   // c52 plain-editor: "Added" matches the link
+  const same = [...typedParts.values()].find(s => s.add && s.k === k && noQty(s.v) === noQty(snap(k)));
+  if (same) { fs(k).querySelector('[name=qty]').value = same.q + e.q; render(); const m = typedParts.get(k);
+    if (m) typedParts.set(same.kk, { ...m, kk: same.kk, add: 1, v: snap(k) }); }
+  else typedParts.set(`${k}+${++addN}`, { ...e, kk: `${k}+${addN}`, add: 1, v: snap(k) });
+  typedParts.delete(k); putSnap(k, DEF[k]); delete touched[k]; delete szTyped[k]; renum(k); render();
+  $('#cadmsg').textContent = same ? `Added ${e.q} to ${(h => h ? `part ${h}` : 'your part')(typedParts.get(same.kk)?.name.match(/#\d+/)?.[0])}.` : `Added: ${what} × ${e.q}. Type the next part.`;   // c52 plain-editor: "Added" matches the link
   const L = fs(k).querySelector(k === 'panel' ? '[name=pL]' : '[name=mL]'); L.focus(); L.select(); };
 
 function summary(){
@@ -1123,7 +1138,8 @@ function summary(){
       // B89: a file priced earlier keeps its spec, quantity and estimate.
       // B135: with every priced line (Parts, Setup, Mold, Review), like the file above, so the order total can be checked.
       return o.length && (A || cadNames().length > 1 || !pricedFile && o.some(n => est.has(n) || rvw.has(n))) ? [...(G ? [] : ['']), ...o.map(n => est.has(n) ? [`${n}: ${est.get(n).spec}. Quantity ${est.get(n).q}${est.get(n).sets > 1 ? ' sets' : ''}.`, ...(est.get(n).wl ? [est.get(n).wl] : []), ...(est.get(n).ul || []), ...(est.get(n).lines || []).filter(l => !C || noRvw(l)).map(l => `${l[0].replace(/^Part check$/, 'Part check (once per order)')}: ${usd(l[1])}`), C ? `Subtotal for ${n}: ${usd(est.get(n).sub - R)}` : `Estimate for ${n}: ${usd(est.get(n).sub)} (not a firm quote).`].join('\n')
-        : rvw.has(n) ? `${n}: ${rvw.get(n).spec.replace(/NaN/g, '?')}. Quantity ${rvw.get(n).q}.${(rvw.get(n).ul || []).map(l => '\n' + l).join('')}${(rvw.get(n).ul || []).length ? '\n' : ' '}${rvw.get(n).units ? `No price yet. Check these sizes: ${rvw.get(n).why.join(' ')}` : `We'll price this by hand: ${rvw.get(n).why.join('; ')}`}`.replace(/\.?$/, '.') : A ? (readFiles.get(n) ? `${n}: ${readFiles.get(n)} (from the file).` : `${n}: we couldn't read its size.`)
+        : rvw.has(n) ? `${n}: ${rvw.get(n).spec.replace(/NaN/g, '?')}. Quantity ${rvw.get(n).q}.${(rvw.get(n).ul || []).map(l => '\n' + l).join('')}${(rvw.get(n).ul || []).length ? '\n' : ' '}${rvw.get(n).units ? `No price yet. Check these sizes: ${rvw.get(n).why.join(' ')}` : `We'll price this by hand: ${rvw.get(n).why.join('; ')}`}`.replace(/\.?$/, '.') : !readFiles.has(n) ? `${n}: attached, not priced.${A ? '' : ' To price it, drop it in the box above.'}`   // c56: a Files-box file is never read; "couldn't read it" made the shop price a reference copy twice
+        : A ? (readFiles.get(n) ? `${n}: ${readFiles.get(n)} (from the file).` : `${n}: we couldn't read its size.`)
         : readFiles.get(n) ? `${n}: ${readFiles.get(n)}. Not priced yet; we'll email a price.` : `${n}: couldn't read it; we'll email a price.`)] : []; })(),
     // B176: typed parts on the other tabs, written like the files above.
     // B195: with the weight and "(typed 11 3/4 in)" lines, the same as the part on screen.
@@ -1136,7 +1152,7 @@ function summary(){
       `${cu.length ? 'Estimate for the priced parts' : 'Order estimate'}: ${usd(Math.max(C.t, P.minOrder))} (not a firm quote)`,
       `${cu.length ? 'Priced parts' : 'All parts'} ready about ${readyRange(C.lead)} if approved today (${C.lead[0]}–${C.lead[1]} working days)${C.slow ? `. ${C.slow} takes the longest, so it sets this date.${flatNote(C)}` : ''}`] : []),   // B124: one ready line for the order
     ...(last.warn.length && !G ? ['', 'Notes:', ...last.warn.map(w => '- ' + w)] : []), '',
-    `Name: ${s.name.value}`, `Company: ${s.org.value}`, `Email: ${s.email.value}`, `Need by: ${s.need.value || 'flexible'}${({ sooner: ' (before our lead time, check with shop)', tight: ' (tight, check with shop)' })[needFit()] || ''}`,
+    `Name: ${s.name.value}`, `Company: ${s.org.value}`, `Email: ${s.email.value}`, `Need by: ${s.need.value || 'flexible'}${({ sooner: ' (before our lead time, check with shop)', tight: ' (tight, check with shop)', past: ' (date has passed)' })[needFit()] || ''}`,
     `Application and loads: ${s.notes.value}`, '', UPLOAD_URL ? '' : '[Attach CAD / drawings / sketch]'
   ].join('\n').replace(/^([^\n]*\n)\n+/, '$1\n');   // c46: an untouched tab (G) left extra blank lines under the title
 }
