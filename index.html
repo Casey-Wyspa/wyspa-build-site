@@ -192,7 +192,7 @@ html,body{margin:0;background:#eef2f3}
     <label>Material<select name="rMat"></select></label>
     <label>Mold<select name="rGeo">
      <option value="new">Make a new mold from my file</option>
-     <option value="repeat">Repeat order (you have my mold)</option>
+     <option value="repeat">Repeat order (Wyspa made my mold)</option>
      <option value="design">Design the rotor for me</option>
     </select></label>
     <label>Quantity<input type="text" inputmode="numeric" autocomplete="off" name="qty" value="8"></label>
@@ -203,7 +203,7 @@ html,body{margin:0;background:#eef2f3}
     <label>Depth (mm or in)<input type="text" name="mH" value="80"></label>
     <label>Wall thickness (mm or in)<input type="text" name="mWall" value="1 mm"></label>
     <label>Material<select name="mMat"></select></label>
-    <label>Mold<select name="mTool"><option value="new">Make a new mold</option><option value="have">Repeat order (you have my mold)</option></select></label>
+    <label>Mold<select name="mTool"><option value="new">Make a new mold</option><option value="have">Repeat order (Wyspa made my mold)</option></select></label>
     <label class="full">Shape<select name="mCx"></select><span class="cv" style="color:var(--muted)">Solid or closed part (blade, fin, foil)? Pick Closed or hollow.</span></label>
     <label>Quantity<input type="text" inputmode="numeric" autocomplete="off" name="qty" value="5"></label>
    </fieldset>
@@ -537,7 +537,7 @@ function calc(){
     }
     const bw = +(n * m.t).toFixed(2);   // B185: the wall we build (whole plies), same as the weight uses
     thk = `, ${bw} mm wall.`;
-    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${+a.toPrecision(3)} m² ${fromFile || fIn ? 'surface, measured from your file' : fSc ? 'surface, from your file scaled to your size' : 'surface, estimated from your dimensions'}), ${wallQ ? 'wall to confirm' : review.length ? `${wall} mm wall` : `${bw} mm wall (${n} ${n === 1 ? 'ply' : 'plies'})`}, ${m.label}, ${c.label}, ${val('mTool') === 'new' ? 'new mold' : 'repeat order, our existing mold'}`);   // B129: from the Mold choice, not the mold price (blank sizes made it say "existing mold")
+    spec.push(`Molded part envelope ${L} × ${W} × ${H} mm (~${+a.toPrecision(3)} m² ${fromFile || fIn ? 'surface, measured from your file' : fSc ? 'surface, from your file scaled to your size' : 'surface, estimated from your dimensions'}), ${wallQ ? 'wall to confirm' : review.length ? `${wall} mm wall` : `${bw} mm wall (${n} ${n === 1 ? 'ply' : 'plies'})`}, ${m.label}, ${c.label}, ${val('mTool') === 'new' ? 'new mold' : 'repeat order, reuse our mold'}`);   // B129: from the Mold choice, not the mold price (blank sizes made it say "existing mold")
   } else {
     const txt = n => fs('assembly').querySelector(`[name="${n}"]`).value.trim();
     review.push('Assembly');
@@ -731,9 +731,11 @@ const flatNote = C => { const f = C && C.slow && C.it.filter(x => x[1].k === 'pa
 const REP = /repeat order/i, repeatSelf = () => !ghost() && (kind === 'rotor' && val('rGeo') === 'repeat' || kind === 'molded' && val('mTool') === 'have'),
   repeatNames = () => [...cadNames().filter(n => n !== pricedFile && est.has(n) && REP.test(est.get(n).spec)), ...[...typedParts].filter(([k, e]) => k !== kind && REP.test(e.spec)).map(([, e]) => e.name)],
   repeatOrd = () => repeatSelf() || cadNames().some(n => est.has(n) && REP.test(est.get(n).spec)) || [...typedParts].some(([k, e]) => k !== kind && REP.test(e.spec));
+// c60 #1: buyers read Repeat as "I have my own mold". Molds are made by Wyspa's partner shops only (Casey 2026-10-10). Page only.
+const REPEAT_TXT = "Add your earlier order number (WB-...) to Notes. We only reuse molds we made.";
 // B202: the screen line names the repeat part unless it is the one on this tab.
 const repeatNote = () => { const n = repeatNames(), p = n.length > 1;
-  return repeatSelf() || !n.length ? "Repeat order: we'll check your mold, then send a pay link." : `${esc(n[0].startsWith('your ') ? cap(n.join(' and ')) : n.join(' and '))} ${p ? 'are repeat orders' : 'is a repeat order'}. We'll check your ${p ? 'molds' : 'mold'}, then send a pay link.`; };
+  return repeatSelf() || !n.length ? "Repeat order: we'll check the mold, then send a pay link." : `${esc(n[0].startsWith('your ') ? cap(n.join(' and ')) : n.join(' and '))} ${p ? 'are repeat orders' : 'is a repeat order'}. We'll check the ${p ? 'molds' : 'mold'}, then send a pay link.`; };
 // B140: the one review, and a test for its line, so per-file subtotals can leave it out when it's charged once for the order.
 const rvwUsd = () => Math.round(price(P.reviewHours, 0)), noRvw = l => !/^Part check/.test(l[0]), noMin = l => noRvw(l) && !/^Minimum order/.test(l[0]);   // B171: a typed part's minimum is the order's
 // B99: each tab remembers the last file priced on it, and each file keeps what was read from it (mesh surface, cut length,
@@ -1048,7 +1050,7 @@ function draw(){
   // stock catalog items; carbon + glass sheet isn't, so no line for it.
   const fit2 = noFile && !holes && val('pCore') !== 'core' && val('pMat') !== 'hybrid' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
     : kind === 'rotor' && val('rGeo') === 'new' ? ["A stock-size prop usually costs less from a catalog. We're best for custom rotors."] : [];
-  $('#warn').innerHTML = [...(kind === 'rotor' ? [rotorNote()] : []), ...(CHECKOUT && noFileKind() ? [noFileTxt(noFileKind())] : []), ...(CHECKOUT && closedOv() ? [CLOSED_TXT] : []), ...(CHECKOUT && repeatOrd() ? [repeatNote()] : []), ...(last.wt ? [last.wt] : []), ...(kind === 'panel' ? (m => m ? [`${cap(m[0])}.`] : [])((last.spec[0] || '').match(/edges sealed(?:, holes filled for bolts)?/)) : []), ...plain, ...fit2, ...last.warn, ...((last.only || C) && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)}${cadNames().length ? ' across all files' : ''}.`] : []), ...(last.belowMin && !C ? [`Every order is at least ${usd(P.minOrder)}.${cl.length ? '' : last.fit > last.q ? (last.sets > 1 ? ` That covers up to ${last.fit} sets, so you can add more at no extra cost.` : ` That covers ${last.fit} of this part, so you can add more at no extra cost.`) : ''}${typed && !cl.length ? ' Have more parts? Add them here and we\'ll price them as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+  $('#warn').innerHTML = [...(repeatSelf() ? [REPEAT_TXT] : []), ...(kind === 'rotor' ? [rotorNote()] : []),...(CHECKOUT && noFileKind() ? [noFileTxt(noFileKind())] : []), ...(CHECKOUT && closedOv() ? [CLOSED_TXT] : []), ...(CHECKOUT && repeatOrd() ? [repeatNote()] : []), ...(last.wt ? [last.wt] : []), ...(kind === 'panel' ? (m => m ? [`${cap(m[0])}.`] : [])((last.spec[0] || '').match(/edges sealed(?:, holes filled for bolts)?/)) : []), ...plain, ...fit2, ...last.warn, ...((last.only || C) && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)}${cadNames().length ? ' across all files' : ''}.`] : []), ...(last.belowMin && !C ? [`Every order is at least ${usd(P.minOrder)}.${cl.length ? '' : last.fit > last.q ? (last.sets > 1 ? ` That covers up to ${last.fit} sets, so you can add more at no extra cost.` : ` That covers ${last.fit} of this part, so you can add more at no extra cost.`) : ''}${typed && !cl.length ? ' Have more parts? Add them here and we\'ll price them as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 // The card button shows only for one firm instant number covering the whole request: no custom quote, no "Check your sizes",
