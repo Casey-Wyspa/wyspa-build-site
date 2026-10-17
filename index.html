@@ -681,7 +681,7 @@ const pricedOthers = () => { const it = [...cadNames().filter(n => n !== pricedF
 const cuQ = e => e.bq ? [`"${e.bq}"`, 'q'] : [e.q, e.units];
 const customOthers = self => [...cadNames().filter(n => n !== pricedFile && rvw.has(n)).map(n => [n, ...cuQ(rvw.get(n))]),
   ...[...typedParts].filter(([k, e]) => (k !== kind || self && e.bq && ghost()) && e.rv).map(([, e]) => [e.name, ...cuQ(e)])];
-const customTxt = () => [...(last && last.manual && !ghost() ? [[kind === 'assembly' ? tName(kind) : pricedFile || tName(kind), last.q, last.units]] : []),
+const customTxt = () => [...(qFile && !ghost() ? [[pricedFile, (t => t ? `"${t}"` : '(blank)')(fs(kind).querySelector('[name=qty]').value.trim()), 'q']] : last && last.manual && !ghost() ? [[kind === 'assembly' ? tName(kind) : pricedFile || tName(kind), last.q, last.units]] : []),   // c63 #3: a file with no usable quantity
   ...customOthers(1)].map(([n, q, u]) => `${n} × ${q} (${u === 'q' ? 'quantity unclear' : u ? 'sizes to check' : 'custom quote'})`);
 // c48 #1: one line per custom-quote item in the priced tab's box: "Molded part: custom quote. We'll reply with a price."
 const customLines = () => customOthers().map(([n, , u]) => `${n.startsWith('your ') ? cap(n.slice(5)) : n}: ${u === 'q' ? "enter the quantity as a whole number" : u ? "we'll check the sizes" : "we'll reply with a price"}.`);   // plain-editor c48
@@ -931,13 +931,25 @@ $('#unit').onclick = () => { const c = fileCtx.get(pricedFile), fo = fileObj(pri
 // B173: a file name in the price box opens that file again on its own tab, with its own fields, like dropping it again.
 $('#per').onclick = e => { const kt = e.target.closest('a[data-t]'); if (kt) { e.preventDefault(); return unkeep(kt.dataset.t); }
   const kx = e.target.closest('a[data-x]'); if (kx) { e.preventDefault(); return unadd(kx.dataset.x); }   // c52: "remove" next to a saved part
+  const kr = e.target.closest('a[data-r]'); if (kr) { e.preventDefault(); return unfile(kr.dataset.r); }   // c63: "remove" next to a file
   const a = e.target.closest('a[data-f]'), n = a && a.dataset.f, c = n && fileCtx.get(n), fo = n && fileObj(n); if (!c || !fo) return;
   e.preventDefault(); const v = fileVals.get(n); if (v && v.k !== kind) setKind(v.k, true); applyFile(c.g, fo, false, true, 2); };
 // c58: "Price it separately": the file is read and priced as its own part after all.
 $('#dupmsg').onclick = e => { const a = e.target.closest('a[data-two]'), n = a && a.dataset.two, g = n && dupG.get(n), fo = n && fileObj(n); if (!g || !fo) return;
   e.preventDefault(); twoOk.add(n); dupOf.delete(n); applyFile(g, fo); };
 const esc = s => String(s).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`), fLink = (n, e) => e.kk ? `<a href="#" data-t="${e.kk}">${esc(nm(n, e))}</a>` : e.t || n === pricedFile ? esc(nm(n, e)) : `<a href="#" data-f="${esc(n)}">${esc(n)}</a>`;   // c49: kk = a kept typed part
-const rmL = e => e.add ? ` (<a href="#" data-x="${e.kk}">remove</a>)` : '';   // c52: after a saved part's price in the price box
+const rmL = (e, n) => e.add ? ` (<a href="#" data-x="${e.kk}">remove</a>)` : !e.t && !e.kk && n ? rmF(n) : '';   // c52: after a saved part's price in the price box; c63: a file's too
+// c63 WORST: every dropped file named in the price box can be taken out of the order (price, email and upload), like a saved part.
+const rmF = n => cadNames().includes(n) ? ` (<a href="#" data-r="${esc(n)}">remove</a>)` : '';
+// c63: the files that keep the card away because we price them by hand (not units questions, not an unclear quantity).
+const handFiles = () => cadNames().filter(n => rvw.has(n) && !rvw.get(n).bq && !rvw.get(n).units && !(n === pricedFile && qFile));
+const PAYNOW = f => CHECKOUT && f.length ? `\n<div>To pay now for the priced parts, remove ${esc(f.join(' and '))} and send ${f.length > 1 ? 'them' : 'it'} as ${f.length > 1 ? 'their' : 'its'} own request.</div>` : '';   // c63 draft, for plain-editor
+// c63: an order's items with their prices, as one line (the G, priced and unclear-quantity boxes share it).
+const orderHtml = (O, R) => `${O.it.map(([n, e]) => `${fLink(n, e)} × ${qS(e)}: ${usd(e.sub - R)}${rmL(e, n)}`).join(' + ')} + ${usd(R)} part check (once per order)${shOut(O)}${O.t < P.minOrder ? ` + ${usd(P.minOrder - O.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(O.lead)} if you approve today${O.slow ? `. ${esc(O.slow)} takes the longest, so it sets this date.${flatNote(O)}` : ''}`;
+const orderRows = (O, R) => [...O.it.map(([n, e]) => [`Subtotal for ${n}`, e.sub - R]), ['Part check (once per order)', R], ...shRow(O), ...(O.t < P.minOrder ? [[`Minimum order (${usd(P.minOrder)})`, P.minOrder - O.t]] : [])];
+// c63: the custom-quote lines in the box (customLines), each file with its remove link.
+const customHtml = () => customOthers().map(([n, , u], i) => `\n<div>${esc(customLines()[i])}${rmF(n)}</div>`).join('');
+let qFile = false;   // c63 #3: the file on screen has no quantity we can use (0, blank, "4+4"); the other parts keep their price
 
 let last;
 // Ready dates: today plus the lead time in working days (Sat/Sun and P.holidays skipped, c62).
@@ -997,6 +1009,7 @@ function draw(){
     return el.value.trim() === '' ? req : !(v >= 0) || (req && v <= 0);
   }) || (!last.manual && !isFinite(last.total)));
   badSize = badQty || szBad;
+  qFile = !!pricedFile && kind === pricedKind && kind !== 'assembly' && badQty && !szBad && !needSize;   // c63 #3
   // c62 #1 WORST: sizes fine but a quantity we can't read ("4+4", "four", "2.5"): the part stays in the email as typed, with no price
   // and no card for the order (bq). Blank or 0 still leaves it out (c56).
   const bq = kind !== 'assembly' && badQty && !szBad && !needSize && (t => t && !/^0+$/.test(t) ? t : '')(fs(kind).querySelector('[name=qty]').value.trim());
@@ -1022,9 +1035,19 @@ function draw(){
     const R = rvwUsd(), lo = G.t < P.minOrder, cl = customLines();   // c48 #1: custom-quote items named in the box
     $('#estlb').textContent = cl.length || typedParts.get(kind)?.bq ? 'Estimate for the priced parts' : G.typed ? 'Estimate for your whole order' : G.it.length > 1 ? 'Estimate for all your files' : 'Estimate'; $('#tot').style.fontSize = '';
     $('#tot').textContent = usd(Math.max(G.t, P.minOrder));
-    $('#per').innerHTML = `${G.it.map(([n, e]) => `${fLink(n, e)} × ${qS(e)}: ${usd(e.sub - R)}${rmL(e)}`).join(' + ')} + ${usd(R)} part check (once per order)${shOut(G)}${lo ? ` + ${usd(P.minOrder - G.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(G.lead)} if you approve today${G.slow ? `. ${esc(G.slow)} takes the longest, so it sets this date.${flatNote(G)}` : ''}${cl.map(l => `\n<div>${esc(l)}</div>`).join('')}`;   // B173: file names are links
-    $('#lines').innerHTML = [...G.it.map(([n, e]) => [`Subtotal for ${n}`, e.sub - R]), ['Part check (once per order)', R], ...shRow(G), ...(lo ? [[`Minimum order (${usd(P.minOrder)})`, P.minOrder - G.t]] : [])].map(l => `<tr><td>${l[0]}</td><td class="n">${usdS(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Total</td><td class="n">${usd(Math.max(G.t, P.minOrder))}</td></tr>`;
+    $('#per').innerHTML = `${orderHtml(G, R)}${customHtml()}${PAYNOW(handFiles())}`;   // B173: file names are links
+    $('#lines').innerHTML = orderRows(G, R).map(l => `<tr><td>${l[0]}</td><td class="n">${usdS(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Total</td><td class="n">${usd(Math.max(G.t, P.minOrder))}</td></tr>`;
     $('#warn').innerHTML = [...(kind !== 'assembly' && qBad() && touched[kind] ? [QWHOLE] : []), ...(badEl() && touched[kind] ? [esc(badEl().nextElementSibling.textContent)] : []),...(CHECKOUT && noFileKind() ? [noFileTxt(noFileKind())] : []), ...(CHECKOUT && closedOv() ? [closedTxt()] : [])].map(w => `<div>${w}</div>`).join('\n');   // c53/c54: say why there's no card button
+    return;
+  }
+  // c63 #3: a file whose quantity is 0, blank or unclear leaves the other parts priced; that file asks for its quantity (no card, payUsd).
+  const QO = qFile && pricedOthers();
+  if (QO) { const R = rvwUsd();
+    $('#estlb').textContent = 'Estimate for the priced parts'; $('#tot').style.fontSize = '';
+    $('#tot').textContent = usd(Math.max(QO.t, P.minOrder));
+    $('#per').innerHTML = `${orderHtml(QO, R)}\n<div>${esc(pricedFile)}: enter the quantity as a whole number.${rmF(pricedFile)}</div>${customHtml()}`;
+    $('#lines').innerHTML = orderRows(QO, R).map(l => `<tr><td>${esc(l[0])}</td><td class="n">${usdS(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Total</td><td class="n">${usd(Math.max(QO.t, P.minOrder))}</td></tr>`;
+    $('#warn').innerHTML = '';
     return;
   }
   if (badSize) {
@@ -1046,7 +1069,8 @@ function draw(){
     // B194: the parts already priced on other tabs (or other files) stay on screen next to this custom-quote one.
     const O = pricedOthers(), R = rvwUsd();   // B200: the Assembly tab too
     $('#estlb').textContent = 'Quote'; $('#tot').textContent = 'Custom quote'; $('#tot').style.fontSize = 'clamp(30px,4vw,40px)';
-    $('#per').textContent = O ? `${kind !== 'assembly' && pricedFile || cap(tLbl(kind))}: custom quote. Your other parts: ${usd(Math.max(O.t, P.minOrder))}${O.t < P.minOrder ? ' (our order minimum)' : ''}. Send it and we\'ll reply with one price for everything.` : kind === 'assembly' ? 'Send it with your files. We reply with a price.' : 'We need to look at this one. Send it and we reply with a price.';
+    const F = kind !== 'assembly' && pricedFile;   // c63: the file on screen can be taken out, and the pay-now line says how
+    $('#per').innerHTML = O ? `${esc(F || cap(tLbl(kind)))}: custom quote${F ? rmF(F) : ''}. Your other parts: ${usd(Math.max(O.t, P.minOrder))}${O.t < P.minOrder ? ' (our order minimum)' : ''}. Send it and we\'ll reply with one price for everything.${PAYNOW(handFiles())}` : kind === 'assembly' ? 'Send it with your files. We reply with a price.' : 'We need to look at this one. Send it and we reply with a price.';
     // B197: the order minimum once, as on the priced part's own tab and in the email.
     $('#lines').innerHTML = O ? [...O.it.map(([n, e]) => [`Subtotal for ${n}`, e.sub - R]), ['Part check (once per order)', R], ...shRow(O), ...(O.t < P.minOrder ? [[`Minimum order (${usd(P.minOrder)})`, P.minOrder - O.t]] : [])].map(l => `<tr><td>${esc(l[0])}</td><td class="n">${usdS(l[1])}</td></tr>`).join('') + `<tr class="t"><td>Your other parts</td><td class="n">${usd(Math.max(O.t, P.minOrder))}</td></tr>` : '';
     $('#warn').innerHTML = kind === 'assembly' ? '' : `<div>Why: ${last.review.join(' · ')}</div>${last.review.includes('Small, thick molded part') ? '\n<div>Could it be flat plates bonded together? Try the Flat panel tab.</div>' : ''}${kind === 'rotor' ? `\n<div>${rotorNote()}</div>` : ''}`;
@@ -1064,13 +1088,13 @@ function draw(){
   const C = combo(), R = C ? rvwUsd() : 0, each = usd((last.total - R) / last.q), cl = customLines();
   if (C) $('#estlb').textContent = C.typed ? 'Estimate for your whole order' : 'Estimate for all your files';
   // c48 #1: another part is a custom quote: the big number is the priced parts only, named as in the email.
-  if (cl.length && !last.only) $('#estlb').textContent = 'Estimate for the priced parts';
+  if (cl.length && (C || !last.only)) $('#estlb').textContent = 'Estimate for the priced parts';   // c63 #4: with 2+ files in the total too (was "for all your files")
   const noEach = cl.length && last.belowMin;   // "$750 each, all in" would charge the minimum to this part alone
   $('#tot').textContent = usd(C ? Math.max(C.t, P.minOrder) : last.total);   // the minimum is per order, so that's what 2+ files below it cost
   // B126: the per-file subtotals plus one review add up to the big number.
-  $('#per').innerHTML = C ? `${C.it.map(([n, e]) => `${fLink(n, e)} × ${qS(e)}: ${usd(e.sub - R)}${rmL(e)}`).join(' + ')} + ${usd(R)} part check (once per order)${shOut(C)}${C.t < P.minOrder ? ` + ${usd(P.minOrder - C.t)} to reach ${usd(P.minOrder)} minimum` : ''} · Ready about ${readyRange(C.lead)} if you approve today${C.slow ? `. ${esc(C.slow)} takes the longest, so it sets this date.${flatNote(C)}` : ''}`
+  $('#per').innerHTML = C ? orderHtml(C, R)
     : `${noEach ? '' : `${each} ${last.sets > 1 ? 'per set' : 'each'}, all in · `}Ready about ${readyRange()} if you approve today${last.only ? '. We\'ll send one price for all your files. The review and minimum apply once.' : ''}`;   // B173: file names are links
-  if (cl.length) $('#per').innerHTML += cl.map(l => `\n<div>${esc(l)}</div>`).join('');   // the newline keeps copied text apart (B70)
+  if (cl.length) $('#per').innerHTML += customHtml() + PAYNOW(handFiles());   // the newline keeps copied text apart (B70)
   $('#lines').innerHTML = (C ? last.lines.filter(noMin) : last.lines).map(l => `<tr><td>${l[0]}</td><td class="n">${usd(l[1])}</td></tr>`).join('') + `<tr class="t"><td>${C ? `Subtotal for ${pricedFile || tName(kind)}` : last.only ? `Total for ${last.only}` : 'Total'}</td><td class="n">${usd((C ? last.sub : last.total) - R)}</td></tr>`;
   // Minimum-order and no-drawing notes are shown on the page only; the email already carries the "Minimum order" line and the file list.
   // No file on the panel tab: say what the typed price covers (test-client 0500 #4: frame-plate buyers assumed cutouts were in).
@@ -1187,13 +1211,26 @@ function unkeep(kk){ const e = typedParts.get(kk); if (!e) return; const k = e.k
 // c52 #1: "+ Add another part" saves the part typed on Flat or Molded as its own order item (like c49's kept part, several allowed)
 // and puts that tab back to the page's untouched fields for the next one. Only a part with an instant price and a size the buyer
 // typed (not the page's default sizes) can be saved; the untouched tab is then a ghost and adds nothing (c49 lesson).
-const DEF = { panel: snap('panel'), molded: snap('molded') };   // the page's own fields, before anything is typed
+const DEF = { panel: snap('panel'), molded: snap('molded'), rotor: snap('rotor') };   // the page's own fields, before anything is typed (c63: rotor, for a removed file)
 let addN = 0;
 function canAdd(){ const e = typedParts.get(kind);
   return !!e && !e.rv && !pricedFile && !ghost() && /^(panel|molded)$/.test(kind) && !!szTyped[kind]; }   // c53: a size the buyer typed, even the default "600"
 function renum(k){ let i = 0; typedParts.forEach(e => { if (e.add && e.k === k) e.name = `your ${tLbl(k)} #${++i}`; }); const live = typedParts.get(k); if (live) live.name = tName(k); }
 function unadd(kk){ const e = typedParts.get(kk); if (!e || !e.add) return; typedParts.delete(kk); renum(e.k);
   if (/^Added/.test($('#cadmsg').textContent)) $('#cadmsg').textContent = ''; render(); }
+// c63 WORST: "remove" next to a file takes it out of the order: off the upload (Files box), out of the price and the email.
+// The file on screen: the last other file we read opens in its place, else its tab goes back to the page's own fields.
+function unfile(n){ const fi = $('#sf').elements.files; if (![...fi.files].some(f => f.name === n)) return;
+  const dt = new DataTransfer(); [...fi.files].filter(f => f.name !== n).forEach(f => dt.items.add(f)); fi.files = dt.files;
+  [readFiles, est, rvw, fileCtx, fileVals, dupG].forEach(M => M.delete(n)); dupOf.delete(n); twoOk.delete(n); dupShow('');
+  dupOf.forEach((o, d) => { if (o === n) dupOf.delete(d); });   // a second copy of it is now just attached
+  Object.keys(tabFile).forEach(k => { if (tabFile[k].f === n) delete tabFile[k]; }); preEd = null; $('#filemsg').textContent = '';
+  if (n !== pricedFile) { render(); return; }
+  const nx = cadNames().reverse().find(x => fileCtx.has(x) && (est.has(x) || rvw.has(x)));
+  pricedFile = ''; pricedKind = ''; fileGeo = null; fileSurf = null; fileSolid = false; unitEl = null;
+  if (nx) { const v = fileVals.get(nx); if (v && v.k !== kind) setKind(v.k, true); applyFile(fileCtx.get(nx).g, fileObj(nx), false, true, 2); }
+  else { if (DEF[kind]) putSnap(kind, DEF[kind]); delete touched[kind]; delete szTyped[kind]; $('#cadmsg').textContent = ''; render(); }
+  $('#cadmsg').textContent = `Removed ${n}. ${$('#cadmsg').textContent}`.trim(); }
 // "24 × 16 × 3/8 in" as typed (one unit at the end when all sizes share it), "600 × 400 × 2 mm" for bare mm.
 const typedSize = k => { const p = (k === 'panel' ? ['pL', 'pW', 'pT'] : ['mL', 'mW', 'mH']).map(n => fs(k).querySelector(`[name="${n}"]`)).filter(el => el.value.trim()).map(el => {
     const r = size(el), t = r.typed || `${r.v} mm`, m = t.match(/^(.*) (mm|cm|in)$/); return m ? [m[1], m[2]] : [t, '']; });
@@ -1219,7 +1256,7 @@ function summary(){
   // B140: with 2+ priced files (C), file blocks leave the review out; it's listed once in the order section at the end.
   // B171: an untouched typed tab (G) sends only the files and their order; a typed part joins the order section (combo).
   // B197: a custom-quote part on screen: the priced parts are still one order (part check once, minimum once), as the price box shows.
-  const s = $('#sf').elements, G = ghost(), C = combo() || (last.manual && !G ? pricedOthers() : null), R = C ? rvwUsd() : 0;
+  const s = $('#sf').elements, G = ghost(), C = combo() || ((last.manual || qFile) && !G ? pricedOthers() : null), R = C ? rvwUsd() : 0;   // c63 #3: qFile, as the price box
   const sl = shapeLines(), qv = kind !== 'assembly' && qBad() ? fs(kind).querySelector('[name=qty]').value.trim() : null;   // c62 #4: a quantity we can't read ("4+4") is sent as typed, never as 1
   const cu = customTxt(), pz = C ? C.it : [...(!last.manual && !badSize && !needSize && !G ? [[pricedFile || tName(kind), { q: last.q }]] : []), ...(pricedOthers()?.it || [])];   // B194
   return [
