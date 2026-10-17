@@ -133,7 +133,10 @@ window.WYSPA_PRICING = {
 
   // Lead time in working days by order type (before any shipping)
   leadDays: { panel: [10, 15], rotor: [15, 20], rotorNewMold: [25, 35], molded: [20, 30], moldedNewMold: [35, 50] },
-  // B116 (2026-10-14): extra days for big orders. 8 shop h/day (Drive budget "est shop day $680" = 8 h at $85); base ranges already hold 5 days of work (D-spigot job);
+  // B116 (2026-10-14): extra days for big orders. base ranges already hold 5 days of work (D-spigot job);
   // one mold: 1 cure/day molded, 2 press cycles/day rotor (judgment, wet-layup working time + cure). research/pricing/lead-time-2026-10-14.md
-  leadQty: { hrPerDay: 8, daysInBase: 5, cyclesPerDay: { rotor: 2, molded: 1 } },
+  // c61 (2026-10-17): 16 shop h/day = 2 people x 8 h (was 8, from a budget "shop day $680" line, not a pace). Still under the only shop actual:
+  // CJR invoice 1165, 481.5 h in ~5 weeks with 2-3 people = ~19 h/day (research/pricing/x2-reference.md 3.1). Dates only; prices unchanged.
+  // research/pricing/qty30-hatch-capacity-2026-10-17.md
+  leadQty: { hrPerDay: 16, daysInBase: 5, cyclesPerDay: { rotor: 2, molded: 1 } },
 };
