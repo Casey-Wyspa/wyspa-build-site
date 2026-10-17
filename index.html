@@ -454,10 +454,14 @@ function calc(){
     const sL = small('mL', 'Length', 25), sW = small('mW', 'Width', 25), hEl = fs('molded').querySelector('[name=mH]'), hv = hEl.value.trim();
     const hQ = (inchIn('mL') || inchIn('mW') || sL || sW) && size(hEl).bare && hEl.value !== hEl.dataset.f && H > 0 && H <= 60;   // B118; over 60 can't be inches here (B36 range)
     // B52: until the buyer picks a shape, pick Open or Deep from the sizes (same rule as for files). Not while a unit is in doubt (B130).
-    if (!cx.dataset.t && cx.value !== 'complex' && Math.min(L, W) > 0 && !sL && !sW && !hQ) cx.value = H / Math.min(L, W) <= 0.5 ? 'simple' : 'medium';   // B90: depth = half the width is Open
+    // c57: a file's sizes, unchanged: its depth less one wall (the wall under the rim isn't mold depth; dw = 0 if the wall read isn't real). Typed sizes: as typed.
+    const fileD = fileSurf && fileSurf.dw > 0 && fileSurf.L === L && fileSurf.W === W && fileSurf.H === H, Hd = fileD ? fileSurf.f[2] - fileSurf.dw : H, span = Math.min(L, W);
+    if (!cx.dataset.t && cx.value !== 'complex' && span > 0 && !sL && !sW && !hQ) cx.value = Hd / span <= 0.5 ? 'simple' : 'medium';   // B90: depth = half the width is Open
     // B157: Open picked for a part deeper than half its width: price it as Deep (the same rule as the auto pick) and say so.
-    const tooDeep = cx.value === 'simple' && Math.min(L, W) > 0 && H / Math.min(L, W) > 0.5;
-    if (tooDeep) warn.push('Depth is over half the width, so we priced it as Deep.');
+    // c57: with the numbers, so the buyer sees why his Shape choice wasn't used (plain-editor c57). Depth shown rounded up, so it never reads as exactly half.
+    const tooDeep = cx.value === 'simple' && span > 0 && Hd / span > 0.5, n1 = v => +v.toFixed(1);
+    if (tooDeep) warn.push(fileD ? `You picked Open, but ${Math.ceil(Hd * 10 - 1e-9) / 10} mm deep (not counting the wall) is more than half the ${n1(span)} mm width, so we priced it as Deep.`
+      : `You picked Open, but ${n1(H)} mm deep is more than half the ${n1(span)} mm width, so we priced it as Deep.`);
     const m = P.plies[val('mMat')], c = P.molded.complexity[tooDeep ? 'medium' : cx.value], M = P.molded;
     // B196: wall in mm -> the nearest whole number of plies (as flat panels), plus one ply if the nearest is more than
     // molded.wallUnder (5%) under the typed wall. Was rounded up: 1/16 in glass built 1.82 mm (7 plies), now 1.56 mm (6).
@@ -761,7 +765,11 @@ function applyFile(g, file, sketch, picked, re) {
     // Flanges and inserts can't be read from a mesh, so the buyer picks those. Was depth < 15% of the longest side.
     const span = Math.min(g.L, g.W);
     readCx = !!(g.complex || fileSolid);
-    put('mCx', readCx ? 'complex' :span > 0 && g.H / span <= 0.5 ? 'simple' : 'medium');
+    // c57: a file's depth includes the wall under the rim; the mold is one side of the part, so the Open/Deep test uses the
+    // depth less one wall, when the file's wall reading is real (0.5 mm or more, open shell). Surface and weight are unchanged.
+    const dw = !readCx && g.wall >= 0.5 ? g.wall : 0;
+    if (fileSurf) fileSurf.dw = dw;
+    put('mCx', readCx ? 'complex' :span > 0 && (g.H - dw) / span <= 0.5 ? 'simple' : 'medium');
     // B66: an inch STEP is shown in inches first, like an inch DXF (B57).
     what = `${g.inch ? `${inch(g.L)} × ${inch(g.W)} × ${inch(g.H)} in (${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm)` : `${r(g.L)} × ${r(g.W)} × ${r(g.H)} mm`}${g.wall ? `, about ${wall} mm wall` : ''}`;
     // B147: the same file read as inches, shown once the typed sizes match it in inches (inchNote).
