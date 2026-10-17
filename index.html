@@ -731,6 +731,10 @@ const flatNote = C => { const f = C && C.slow && C.it.filter(x => x[1].k === 'pa
 const REP = /repeat order/i, repeatSelf = () => !ghost() && (kind === 'rotor' && val('rGeo') === 'repeat' || kind === 'molded' && val('mTool') === 'have'),
   repeatNames = () => [...cadNames().filter(n => n !== pricedFile && est.has(n) && REP.test(est.get(n).spec)), ...[...typedParts].filter(([k, e]) => k !== kind && REP.test(e.spec)).map(([, e]) => e.name)],
   repeatOrd = () => repeatSelf() || cadNames().some(n => est.has(n) && REP.test(est.get(n).spec)) || [...typedParts].some(([k, e]) => k !== kind && REP.test(e.spec));
+// c60 WORST: a rotor in the order + Notes asking for both spin directions = second mold not in the instant price, so no card (plain-edited line).
+const BOTH_RX = /\bccw\b|counter[- ]?clockwise|both (spin )?(directions|ways)|\bpairs?\b|\bmirror/i, BOTH_TXT = "Both spin directions need a second mold. Press Send and we'll price it.",
+  hasRotor = () => kind === 'rotor' && !ghost() || cadNames().some(n => est.has(n) && /\brotor/i.test(est.get(n).spec)) || [...typedParts].some(([k, e]) => k !== kind && /\brotor/i.test(e.spec)),
+  bothDir = () => hasRotor() && BOTH_RX.test($('#sf').elements.notes.value);
 // c60 #1: buyers read Repeat as "I have my own mold". Molds are made by Wyspa's partner shops only (Casey 2026-10-10). Page only.
 const REPEAT_TXT = "Add your earlier order number (WB-...) to Notes. We only reuse molds we made.";
 // B202: the screen line names the repeat part unless it is the one on this tab.
@@ -1050,7 +1054,7 @@ function draw(){
   // stock catalog items; carbon + glass sheet isn't, so no line for it.
   const fit2 = noFile && !holes && val('pCore') !== 'core' && val('pMat') !== 'hybrid' ? ["Plain sheet will often cost less from a catalog. We're best for custom parts."]
     : kind === 'rotor' && val('rGeo') === 'new' ? ["A stock-size prop usually costs less from a catalog. We're best for custom rotors."] : [];
-  $('#warn').innerHTML = [...(repeatSelf() ? [REPEAT_TXT] : []), ...(kind === 'rotor' ? [rotorNote()] : []),...(CHECKOUT && noFileKind() ? [noFileTxt(noFileKind())] : []), ...(CHECKOUT && closedOv() ? [CLOSED_TXT] : []), ...(CHECKOUT && repeatOrd() ? [repeatNote()] : []), ...(last.wt ? [last.wt] : []), ...(kind === 'panel' ? (m => m ? [`${cap(m[0])}.`] : [])((last.spec[0] || '').match(/edges sealed(?:, holes filled for bolts)?/)) : []), ...plain, ...fit2, ...last.warn, ...((last.only || C) && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)}${cadNames().length ? ' across all files' : ''}.`] : []), ...(last.belowMin && !C ? [`Every order is at least ${usd(P.minOrder)}.${cl.length ? '' : last.fit > last.q ? (last.sets > 1 ? ` That covers up to ${last.fit} sets, so you can add more at no extra cost.` : ` That covers ${last.fit} of this part, so you can add more at no extra cost.`) : ''}${typed && !cl.length ? ' Have more parts? Add them here and we\'ll price them as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
+  $('#warn').innerHTML = [...(CHECKOUT && bothDir() ? [BOTH_TXT] : []), ...(repeatSelf() ? [REPEAT_TXT] : []), ...(kind === 'rotor' ? [rotorNote()] : []),...(CHECKOUT && noFileKind() ? [noFileTxt(noFileKind())] : []), ...(CHECKOUT && closedOv() ? [CLOSED_TXT] : []), ...(CHECKOUT && repeatOrd() ? [repeatNote()] : []), ...(last.wt ? [last.wt] : []), ...(kind === 'panel' ? (m => m ? [`${cap(m[0])}.`] : [])((last.spec[0] || '').match(/edges sealed(?:, holes filled for bolts)?/)) : []), ...plain, ...fit2, ...last.warn, ...((last.only || C) && (C ? C.t : last.total) < P.minOrder ? [`Minimum order is ${usd(P.minOrder)}${cadNames().length ? ' across all files' : ''}.`] : []), ...(last.belowMin && !C ? [`Every order is at least ${usd(P.minOrder)}.${cl.length ? '' : last.fit > last.q ? (last.sets > 1 ? ` That covers up to ${last.fit} sets, so you can add more at no extra cost.` : ` That covers ${last.fit} of this part, so you can add more at no extra cost.`) : ''}${typed && !cl.length ? ' Have more parts? Add them here and we\'ll price them as one order.' : ''}`] : [])].map(w => `<div>${w}</div>`).join('\n');   // B70: spaced lines on the page; the newline keeps copied text apart too
 }
 
 // The card button shows only for one firm instant number covering the whole request: no custom quote, no "Check your sizes",
@@ -1063,6 +1067,7 @@ function payUsd(){
   if (sizeBad()) return 0;   // c58 build-lead: a size we can't read was meant to be in the order; no card for only the rest (the field hint says why)
   // B176/B181: a typed part on another tab that has no instant price, or isn't in the total, means no card button.
   if (/^(sooner|tight|past)$/.test(needFit())) return 0;   // c57: 'past' too (c56 split it out of 'sooner' and lost the card rule). c56: 'tight' too. c55 WORST (open since c46): no card for an order the page just said it can't make by the buyer's date
+  if (bothDir()) return 0;   // c60 WORST: Notes ask for CW + CCW but the instant price has one mold (card was $11,240 vs $18,350 with both molds)
   if (noRotorFile() || repeatOrd() || closedOv() ||[...typedParts].some(([k, e]) => k !== kind && (e.rv || e.nf || !C))) return 0;   // c43: a new rotor mold needs the buyer's file before card payment
   const t = C ? (fl.every(n => est.has(n)) ? Math.max(C.t, P.minOrder) : 0) : (last.only || fl.some(n => n !== pricedFile) ? 0 : last.total), r = Math.round(t);
   return isFinite(r) && r >= P.minOrder && r <= 50000 && usd(r) === $('#tot').textContent ? r : 0;
@@ -1121,6 +1126,7 @@ qf.addEventListener('input', e => { if (/^p[LW]$/.test(e.target.name) && kind ==
 { const t = new Date(); $('#sf').elements.need.min = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`; }
 $('#sf').elements.need.addEventListener('change', render);   // c55: the date can hide or show the card button, so redraw it all
 $('#sf').elements.need.addEventListener('input', render);
+$('#sf').elements.notes.addEventListener('input', render);   // c60: Notes asking for both spin directions hide the card (bothDir)
 qf.elements.pCore.addEventListener('change', e => {
   const t = qf.elements.pT;
   // Only replace the untouched 2 mm default. A typed or file thickness stays; if it's too thin, the price box asks "Is it in inches?" (B47).
