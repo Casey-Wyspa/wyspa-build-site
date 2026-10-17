@@ -189,6 +189,7 @@ html,body{margin:0;background:#eef2f3}
    <fieldset data-k="rotor" hidden>
     <label>Diameter (in or mm)<input type="text" name="rD" value="15"></label>
     <label>Blades<select name="rB"><option>2</option><option>3</option><option>4</option></select></label>
+    <label>Spin direction<select name="rSpin"><option value="one">All one way</option><option value="both">Half each way</option></select></label>
     <label>Material<select name="rMat"></select></label>
     <label>Mold<select name="rGeo">
      <option value="new">Make a new mold from my file</option>
@@ -330,7 +331,8 @@ const bareQ = (ask, all, lbl, ctx) => { const c = pricedFile && kind === pricedK
     .map(el => { const v = el.value.trim(); unitBox.set(el.name, `mm or inches? Type ${v} in or ${v} mm.`); return UQ(`${lbl[el.name]} ${v}: mm or inches? Type ${v} mm or ${v} in.`); }); };
 // B114: what a rotor quantity means. Under the rotor price and as one line in every rotor email.
 // B142: on a repeat order the other direction may already have a mold, so no new-mold wording there.
-const rotorNote = () => `Price is per rotor, not per pair. All rotors in this quote spin the same way. ${val('rGeo') === 'repeat' ? "Need both directions? Say so in the notes and we'll make sure we have both molds." : val('rGeo') === 'design' ? "We design the rotor and its mold and price them together. In the Notes box, tell us your motor, the weight it must lift and the hub size. Need some to spin the other way? Say so there too." : "Need the other direction? Say so in the notes. It needs its own mold, which we'll price after we check your part."}`;   // B194: Design has no part to check
+// c61: the Spin direction choice replaces "say so in the notes" (both ways = second mold in the price).
+const rotorNote = () => { const b = val('rSpin') === 'both'; return `Price is per rotor, not per pair. ${b ? 'Half spin each way, so we make two molds.' : 'All rotors in this quote spin the same way.'}${val('rGeo') === 'repeat' ? (b ? " We'll check we have both molds." : '') : val('rGeo') === 'design' ? " We design the rotor and its mold and price them together. In the Notes box, tell us your motor, the weight it must lift and the hub size." : ''}`; };   // B194: Design has no part to check
 // B112: what "Outer layers" means, under the field while it shows no unit conversion.
 const SKIN_HINT = 'Thickness of each carbon or glass skin on the foam. Set to 1 mm to start. Change it to match your design.';
 // B178: labor multiplier. Steps at the breaks; with P.qtyCurve 'loglinear', a straight line on log(qty) between breaks, flat past the last.
@@ -454,6 +456,8 @@ function calc(){
     kg = R.kgPerIn2 * D * D * bm;
     mat += cons(0, hr);
     if (geo === 'new' || geo === 'design') nre = price((R.mold.hrBase + D * R.mold.hrPerIn) * (B > 2 ? 1.2 : 1), R.mold.matBase + D * R.mold.matPerIn);
+    // c61: "Both ways, half each" = one mold per spin direction, same mold price twice (as two rotor files); parts priced at the total quantity.
+    const spin2 = val('rSpin') === 'both'; if (spin2) nre *= 2;
     lead = nre ? P.leadDays.rotorNewMold : P.leadDays.rotor;
     if (geo === 'design') review.push('Rotor design by Wyspa');
     // B62: a bare number over the limit is probably mm; ask instead of reading "560" as 560 in (same idea as B36).
@@ -461,7 +465,7 @@ function calc(){
     if (mmQ) review.push(UQ(`Diameter over ${X.rotorUnitsD} in. Is it in mm? Type ${rEl.value.trim()} mm.`));
     else if (D > X.rotorMaxD) review.push(`Over ${X.rotorMaxD} in diameter`);   // QUEST A1: priced by hand until Wyspa has built and tested a rotor
     if (B > X.rotorMaxBlades) review.push(`${B}-blade rotor`);
-    spec.push(`Rotor ${mmQ ? `diameter to confirm (typed ${rEl.value.trim()}, no unit)` : `${D} in diameter`}, ${B}-blade, ${m.label}, mold: ${fs('rotor').querySelector('[name=rGeo]').selectedOptions[0].text}`);
+    spec.push(`Rotor ${mmQ ? `diameter to confirm (typed ${rEl.value.trim()}, no unit)` : `${D} in diameter`}, ${B}-blade, ${m.label}, ${spin2 ? 'half each way, 2 molds' : 'all one way, 1 mold'}, mold: ${fs('rotor').querySelector('[name=rGeo]').selectedOptions[0].text}`);
   } else if (kind === 'molded') {
     const L = val('mL'), W = val('mW'), H = val('mH') || 0, cx = qf.elements.mCx;
     // Units questions first (B130): a bare Length or Width under 25, or a bare Depth next to inch sizes.
@@ -578,7 +582,7 @@ function calc(){
     // B29: show the volume discount on screen, not just in the emailed spec.
     [`${sets > 1 ? 'Sets' : 'Parts'}: ${q} × ${usd2(unitP)}${(capped ? qtyMult(nb.min) : lm) < 1 ? ` (${Math.round((1 - (capped ? qtyMult(nb.min) : lm)) * 100)}% off labor only)` : ''}`, unitP * q],
     setup && ['Setup', setup],
-    nre && [kind === 'molded' && val('mTool') !== 'new' ? `Extra mold${molds > 2 ? 's' : ''} (one time)` : 'Mold (one time)', nre],
+    nre && [kind === 'molded' && val('mTool') !== 'new' ? `Extra mold${molds > 2 ? 's' : ''} (one time)` : kind === 'rotor' && val('rSpin') === 'both' ? '2 molds, one per direction (one time)' : 'Mold (one time)', nre],
     [only ? 'Part check (once per order)' : 'Part check', price(P.reviewHours, 0)],
   ].filter(Boolean).map(l => [l[0], Math.round(l[1])]);   // B31: whole dollars per line, so the lines add up to the total
   let total = lines.reduce((s, l) => s + l[1], 0);
@@ -732,9 +736,12 @@ const REP = /repeat order/i, repeatSelf = () => !ghost() && (kind === 'rotor' &&
   repeatNames = () => [...cadNames().filter(n => n !== pricedFile && est.has(n) && REP.test(est.get(n).spec)), ...[...typedParts].filter(([k, e]) => k !== kind && REP.test(e.spec)).map(([, e]) => e.name)],
   repeatOrd = () => repeatSelf() || cadNames().some(n => est.has(n) && REP.test(est.get(n).spec)) || [...typedParts].some(([k, e]) => k !== kind && REP.test(e.spec));
 // c60 WORST: a rotor in the order + Notes asking for both spin directions = second mold not in the instant price, so no card (plain-edited line).
-const BOTH_RX = /\bccw\b|counter[- ]?clockwise|both (spin )?(directions|ways)|\bpairs?\b|\bmirror/i, BOTH_TXT = "Both spin directions need a second mold. Press Send and we'll price it.",
+const BOTH_RX = /\bccw\b|counter[- ]?clockwise|anti[- ]?clockwise|both (spin )?(directions|ways)|\bpairs?\b|\bmirror|\brevers|\bopposite|\b(lh|rh)\b|(left|right)[- ]hand|\bpush(er)?\b.*\bpull(er)?\b|\bpull(er)?\b.*\bpush(er)?\b|one of each|other way/i,   // c61 #1: wider fallback
+  BOTH_TXT = `Spinning both ways needs a second mold. Pick "Half each way" under Spin direction, or press Send and we'll price it.`,
   hasRotor = () => kind === 'rotor' && !ghost() || cadNames().some(n => est.has(n) && /\brotor/i.test(est.get(n).spec)) || [...typedParts].some(([k, e]) => k !== kind && /\brotor/i.test(e.spec)),
-  bothDir = () => hasRotor() && BOTH_RX.test($('#sf').elements.notes.value);
+  // c61: fallback only; a rotor already set to "Both ways" has both molds priced, so the card stays.
+  spinBoth = () => kind === 'rotor' && !ghost() && val('rSpin') === 'both' || cadNames().some(n => est.has(n) && /half each way, 2 molds/.test(est.get(n).spec)) || [...typedParts].some(([k, e]) => k !== kind && /half each way, 2 molds/.test(e.spec)),
+  bothDir = () => hasRotor() && BOTH_RX.test($('#sf').elements.notes.value) && !spinBoth();
 // c60 #1: buyers read Repeat as "I have my own mold". Molds are made by Wyspa's partner shops only (Casey 2026-10-10). Page only.
 const REPEAT_TXT = "Add your earlier order number (WB-...) to Notes. We only reuse molds we made.";
 // B202: the screen line names the repeat part unless it is the one on this tab.
