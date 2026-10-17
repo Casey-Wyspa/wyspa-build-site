@@ -139,4 +139,7 @@ window.WYSPA_PRICING = {
   // CJR invoice 1165, 481.5 h in ~5 weeks with 2-3 people = ~19 h/day (research/pricing/x2-reference.md 3.1). Dates only; prices unchanged.
   // research/pricing/qty30-hatch-capacity-2026-10-17.md
   leadQty: { hrPerDay: 16, daysInBase: 5, cyclesPerDay: { rotor: 2, molded: 1 } },
+  // c62 (2026-10-17): shop closed days, skipped when counting working days for ready dates (dates only; prices unchanged).
+  // US holidays in the next ~3 months; add the next year's before Jan 2027 ends.
+  holidays: ["2026-11-26", "2026-11-27", "2026-12-24", "2026-12-25", "2026-12-31", "2027-01-01"],
 };
