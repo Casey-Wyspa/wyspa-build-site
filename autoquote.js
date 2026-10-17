@@ -195,10 +195,15 @@
     const parts = set && set.map(s => [s.bb[2] - s.bb[0], s.bb[3] - s.bb[1]].map(v => v * scale).sort((p, q) => q - p)).sort((p, q) => q[0] * q[1] - p[0] * p[1]);
     // c48: the set's outline area in mm² (holes not taken off), for the weight only; a loop we couldn't trace counts its box.
     const setA = set && set.reduce((t, s) => t + (s.pa > 0 ? Math.min(s.pa, area(s)) : area(s)), 0) * scale * scale;
+    // c59 (nested-qty-discount-2026-10-17.md): copies of the least-repeated part in the set, for the labor discount only. Parts match when
+    // outline size, outline length, traced area (when both have one) and hole count agree within 1%. 3 identical fins = 3; 4 brackets = 1.
+    const eq = (a, b) => Math.abs(a - b) <= 0.01 * Math.max(Math.abs(a), Math.abs(b)), nh = s => shapes.filter(h => h.closed && inside(h, s)).length;
+    const same = set && Math.min(...set.map(s => set.filter(o => { const [a, b] = mm(s.bb), [c, d] = mm(o.bb);
+      return eq(a, c) && eq(b, d) && eq(s.len, o.len) && (!(s.pa > 0 && o.pa > 0) || eq(s.pa, o.pa)) && nh(s) === nh(o); }).length));
     const round = Math.min(Math.max(0, holes), loops.filter(isRound).length);
     // B132: each hole's edge length (m), so the page doesn't charge a hole's edge twice (it's already in cutM).
     const holeM = loops.length === Math.max(0, holes) ? loops.map(s => s.len * scale / 1000) : null;
-    return { kind: 'panel', L: (x1 - x0) * scale, W: (y1 - y0) * scale, cutM: part.len * scale / 1000, holes: Math.max(0, holes), round, holeM, parts, setA, units, inch: uc === 1 || scale === 25.4 && !uc };
+    return { kind: 'panel', L: (x1 - x0) * scale, W: (y1 - y0) * scale, cutM: part.len * scale / 1000, holes: Math.max(0, holes), round, holeM, parts, setA, same, units, inch: uc === 1 || scale === 25.4 && !uc };
   }
 
   // ---------- 3D meshes ----------
