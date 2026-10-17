@@ -559,7 +559,7 @@ function calc(){
     const d1 = Math.max(hr / LQ.hrPerDay, cycles && LQ.cyclesPerDay[kind] ? cycles / (LQ.cyclesPerDay[kind] * molds) : 0), one = q === 1 || lead[1] - x + Math.ceil(Math.max(0, d1 - LQ.daysInBase) - 1e-9) + copyDays > X.maxLeadDays;
     // c63: on one mold, when cure days (not labor) set the date, the limit is the mold, not the count
     const cureBound = molds === 1 && cycles && LQ.cyclesPerDay[kind] && q * cycles / LQ.cyclesPerDay[kind] > hr * q / LQ.hrPerDay;
-    if (X.maxLeadDays && lead[1] > X.maxLeadDays) review.push(one ? "This part is too big for an instant ready date. We'll reply with a date." : cureBound ? "One mold can't make this many in our usual time. We'll reply with a date and price." : "Too many parts for an instant ready date. We'll plan it and reply with a date.");   // B163: labor-bound orders past maxLeadDays (extra molds don't help)
+    if (X.maxLeadDays && lead[1] > X.maxLeadDays) review.push(one ? "This part is too big for an instant ready date. We'll reply with a date." : cureBound ? "One mold can't make this many parts in our usual time. We'll plan it and reply with a date." : "Too many parts for an instant ready date. We'll plan it and reply with a date.");   // B163: labor-bound orders past maxLeadDays (extra molds don't help)
   }
   // Part weight: one short line on the page and in the email. Under 0.1 kg in grams.
   // c48: rotor weights are calculated too (nothing built yet), "per rotor" (research/pricing/rotor-weight-2026-10-16.md).
