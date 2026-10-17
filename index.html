@@ -593,7 +593,7 @@ let fileGeo = null, fileSurf = null, fileSolid = false, needSize = false, badSiz
 const readFiles = new Map(), inch = mm => +(mm / 25.4).toFixed(2);
 // c58 (c57 WORST): the same part dropped as a second file (STL + STEP, mm + inches) was priced twice, two molds. A new file of
 // another type whose sorted sizes and surface (flat: cut length, holes, parts) are within 1% of a file already read is kept,
-// sent and named in the email, but not priced again; "Price it as a second part" prices it. Same type isn't merged: mirrored
+// sent and named in the email, but not priced again; "Price it separately" prices it. Same type isn't merged: mirrored
 // left/right parts are usually exported alike and match in size and area.
 const dupOf = new Map(), dupG = new Map(), twoOk = new Set();
 const fam = n => (e => ({ stp: 'step', igs: 'iges' })[e] || e)(n.split('.').pop().toLowerCase());
@@ -610,7 +610,7 @@ function sameAs(g, name) {
   }) || '';
 }
 function dupShow(n) { const el = $('#dupmsg'); el.hidden = !n;
-  el.innerHTML = n ? `This looks like the same part as ${esc(dupOf.get(n))}. We priced it once. <a href="#" data-two="${esc(n)}">Price it as a second part</a>` : ''; }
+  el.innerHTML = n ? `This looks like the same part as ${esc(dupOf.get(n))}. We priced it once. <a href="#" data-two="${esc(n)}">Price it separately</a>` : ''; }
 // B145: typed L, W and H each within 5% of a unitless file's own sizes × 25.4 (the file read as mm is really in inches).
 const NOU = /^(assumed|read as|you chose)/;   // a file with no units (B174: "you chose" = the buyer picked the unit)
 const inFile = (s, L, W, H) =>!!(s && s.nu && [L, W, H].every((v, i) => s.f[i] > 0 && v > 0 && Math.abs(v / (s.f[i] * 25.4) - 1) <= 0.05));
@@ -890,7 +890,7 @@ $('#per').onclick = e => { const kt = e.target.closest('a[data-t]'); if (kt) { e
   const kx = e.target.closest('a[data-x]'); if (kx) { e.preventDefault(); return unadd(kx.dataset.x); }   // c52: "remove" next to a saved part
   const a = e.target.closest('a[data-f]'), n = a && a.dataset.f, c = n && fileCtx.get(n), fo = n && fileObj(n); if (!c || !fo) return;
   e.preventDefault(); const v = fileVals.get(n); if (v && v.k !== kind) setKind(v.k, true); applyFile(c.g, fo, false, true, 2); };
-// c58: "Price it as a second part": the file is read and priced as its own part after all.
+// c58: "Price it separately": the file is read and priced as its own part after all.
 $('#dupmsg').onclick = e => { const a = e.target.closest('a[data-two]'), n = a && a.dataset.two, g = n && dupG.get(n), fo = n && fileObj(n); if (!g || !fo) return;
   e.preventDefault(); twoOk.add(n); dupOf.delete(n); applyFile(g, fo); };
 const esc = s => String(s).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`), fLink = (n, e) => e.kk ? `<a href="#" data-t="${e.kk}">${esc(nm(n, e))}</a>` : e.t || n === pricedFile ? esc(nm(n, e)) : `<a href="#" data-f="${esc(n)}">${esc(n)}</a>`;   // c49: kk = a kept typed part
@@ -1037,7 +1037,10 @@ function draw(){
 // no file still waiting for a price, and the same dollars as the big number on screen. $1,500 to $50,000, as the intake script checks.
 function payUsd(){
   if (!CHECKOUT || !last || badSize && !ghost() || needSize || last.manual || last.units || kind === 'assembly') return 0;
-  const C = combo(), fl = cadNames().filter(n => readFiles.has(n));   // c58: a Files-box reference copy or a second copy of the same part (never read or priced, and we say so) keeps the card
+  // c58: a Files-box reference copy or a second copy of the same part (never read or priced, and we say so) keeps the card.
+  // A main-box file that failed to read is in readFiles ('' from applyFile(null)), so it still hides the card.
+  const C = combo(), fl = cadNames().filter(n => readFiles.has(n));
+  if (sizeBad()) return 0;   // c58 build-lead: a size we can't read was meant to be in the order; no card for only the rest (the field hint says why)
   // B176/B181: a typed part on another tab that has no instant price, or isn't in the total, means no card button.
   if (/^(sooner|tight|past)$/.test(needFit())) return 0;   // c57: 'past' too (c56 split it out of 'sooner' and lost the card rule). c56: 'tight' too. c55 WORST (open since c46): no card for an order the page just said it can't make by the buyer's date
   if (noRotorFile() || repeatOrd() || closedOv() ||[...typedParts].some(([k, e]) => k !== kind && (e.rv || e.nf || !C))) return 0;   // c43: a new rotor mold needs the buyer's file before card payment
