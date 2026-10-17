@@ -1006,7 +1006,7 @@ function payUsd(){
   if (!CHECKOUT || !last || badSize && !ghost() || needSize || last.manual || last.units || kind === 'assembly') return 0;
   const C = combo(), fl = cadNames();
   // B176/B181: a typed part on another tab that has no instant price, or isn't in the total, means no card button.
-  if (/^(sooner|tight)$/.test(needFit())) return 0;   // c56: 'tight' too. c55 WORST (open since c46): no card for an order the page just said it can't make by the buyer's date
+  if (/^(sooner|tight|past)$/.test(needFit())) return 0;   // c57: 'past' too (c56 split it out of 'sooner' and lost the card rule). c56: 'tight' too. c55 WORST (open since c46): no card for an order the page just said it can't make by the buyer's date
   if (noRotorFile() || repeatOrd() || closedOv() ||[...typedParts].some(([k, e]) => k !== kind && (e.rv || e.nf || !C))) return 0;   // c43: a new rotor mold needs the buyer's file before card payment
   const t = C ? (fl.every(n => est.has(n)) ? Math.max(C.t, P.minOrder) : 0) : (last.only || fl.some(n => n !== pricedFile) ? 0 : last.total), r = Math.round(t);
   return isFinite(r) && r >= P.minOrder && r <= 50000 && usd(r) === $('#tot').textContent ? r : 0;
