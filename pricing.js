@@ -40,7 +40,8 @@ window.WYSPA_PRICING = {
     glass:   { label: "Fiberglass",     gsm: 300, t: 0.26, gsmPerMm: 1140, perM2: 30, density: 1.74,       // 7781 E-glass
                fab: 17.7, vol: [[9, 0.87], [90, 0.83]],       // Fibre Glast $15.86/yd -> Aircraft Spruce $13.65/yd; Rock West 100 yd roll $13.09/yd
                cureGsm: 4500,                                 // glass wet layup per cure (~4 mm): West System lays full skins in one cure; Scott Bader 3 mm/operation polyester scaled to epoxy ~5 mm, x0.8 (judgment)
-               layHrPerM2Ply: 0.6 },                          // molded wet layup per m² per ply (glass only): timed hand lay-up 0.35 flat incl. cutting, ~0.56 on shaped tools (Skramstad, MSU 1999); x1.7 for a curved mold (judgment). build_work/research/pricing/molded-wetlayup-2026-10-13.md
+               layHrPerM2Ply: 0.6,                            // molded wet layup per m² per ply (glass only): timed hand lay-up 0.35 flat incl. cutting, ~0.56 on shaped tools (Skramstad, MSU 1999); x1.7 for a curved mold (judgment). build_work/research/pricing/molded-wetlayup-2026-10-13.md
+               layBulk: { t: 0.8, lab: 1.5, faces: 2, minWall: 2.5 } },   // c62: molded walls of 2.5 mm+ are laid as 2 x 7781 faces + 1708 biax (890 gsm, 0.7-1.2 mm/ply, Vectorply E-BXM 1708; 0.8 at Vf 0.45). Layup labor counts faces + 1.5 per 1708 ply (judgment; Skramstad: heavier plies no slower to place; aPriori: time per ply area). Material, weight, cures stay on 7781. research/pricing/glass-thick-wall-2026-10-17.md
     hybrid:  { label: "Carbon + glass", gsm: 250, t: 0.24, gsmPerMm: 1040, perM2: 51, density: 1.60,       // average of one carbon + one 7781 ply
                mix: ["carbon", "glass"] },                    // half the area on each fabric's volume prices
   },
@@ -122,7 +123,7 @@ window.WYSPA_PRICING = {
     moldedTubeRatio: 20, moldedTubeDepth: 0.75,   // B157: length over 20x the width with depth at least 0.75x the width is a tube or rod (closed mold, mandrel or stock tube): priced by hand
     maxPlies: 20,
     moldedHrPerKg: [3, 12],   // molded labor hours per kg of part outside this goes to engineer review. Big-part aerospace plan: 4.1-6.2 h/kg (wing 6.4-9.6)
-    moldedHrPerKgGlass: [1.5, 12],  // glass wet layup runs ~2-3.5 h/kg at the glass layup rate; a timed flat glass part took ~0.6 h/kg (Skramstad 1999). Judgment floor
+    moldedHrPerKgGlass: [1.0, 12],  // c62: with glass layBulk the lowest instant-envelope glass part is 1.05 h/kg (1500x1500x400); sourced shop layup 0.33-0.88 h/kg (glass-hkg-floor-2026-10-16.md). Judgment floor, binds on none today
     moldedHrPerKgMinKg: 2,   // only parts of at least this weight: below it the fixed prep/trim hours dominate (a real 0.5 kg skin took 13.5 h/kg)
     moldedSmallKg: 0.2, moldedSmallGsm: 2400,   // molded part under 0.2 kg with more than 2,400 gsm of fabric (thick for its size): a shop would press-mold or machine it (2026-10-13)
     panelMaxSolidT: 10,       // mm, solid laminate (cure heat, voids, press size)

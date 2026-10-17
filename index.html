@@ -499,7 +499,9 @@ function calc(){
     // B90: small parts have less edge to trim and less mold to prep and bag, so the fixed hours scale with sqrt(area), with a floor.
     const sz = M.fixedFullM2 ? Math.max(M.fixedMinScale || 0, Math.min(1, Math.sqrt(a / M.fixedFullM2))) : 1;
     const szP = M.prepFullM2 ? Math.max(M.fixedMinScale || 0, Math.min(1, Math.sqrt(a / M.prepFullM2))) : sz;   // c40: mold prep scales from S8's 0.234 m²
-    hr = M.hrPerPart * szP + M.trimHours * sz + a * (M.hrPerM2 + n * (m.layHrPerM2Ply || M.hrPerM2Ply)) * c.labor + (cures - 1) * (M.hrPerCure * szP + a * M.hrPerM2 * c.labor);
+    // c63: thick glass is laid as 2 face plies + heavy 1708 biax inside; labor counts layup passes (pricing.js plies.glass.layBulk). Material, weight and cures keep n.
+    const lb = m.layBulk, nLay = lb && n * m.t >= lb.minWall - 1e-9 ? Math.min(n, lb.faces + lb.lab * Math.ceil((n - lb.faces) * m.t / lb.t - 1e-9)) : n;
+    hr = M.hrPerPart * szP + M.trimHours * sz + a * (M.hrPerM2 + nLay * (m.layHrPerM2Ply || M.hrPerM2Ply)) * c.labor + (cures - 1) * (M.hrPerCure * szP + a * M.hrPerM2 * c.labor);
     kg = a * n * m.t * m.density;
     mat += cons(a * cures, hr); cycles = cures;
     const newT = val('mTool') === 'new', MC = M.copies, LQ0 = P.leadQty, L0 = newT ? P.leadDays.moldedNewMold : P.leadDays.molded;
@@ -555,7 +557,9 @@ function calc(){
     lead = [lead[0] + x, lead[1] + x];
     // B198: when one part alone is past maxLeadDays (quantity 1, or a part that big), the cause is its size, not the count.
     const d1 = Math.max(hr / LQ.hrPerDay, cycles && LQ.cyclesPerDay[kind] ? cycles / (LQ.cyclesPerDay[kind] * molds) : 0), one = q === 1 || lead[1] - x + Math.ceil(Math.max(0, d1 - LQ.daysInBase) - 1e-9) + copyDays > X.maxLeadDays;
-    if (X.maxLeadDays && lead[1] > X.maxLeadDays) review.push(one ? "This part is too big for an instant ready date. We'll reply with a date." : "Too many parts for an instant ready date. We'll plan it and reply with a date.");   // B163: labor-bound orders past maxLeadDays (extra molds don't help)
+    // c63: on one mold, when cure days (not labor) set the date, the limit is the mold, not the count
+    const cureBound = molds === 1 && cycles && LQ.cyclesPerDay[kind] && q * cycles / LQ.cyclesPerDay[kind] > hr * q / LQ.hrPerDay;
+    if (X.maxLeadDays && lead[1] > X.maxLeadDays) review.push(one ? "This part is too big for an instant ready date. We'll reply with a date." : cureBound ? "One mold can't make this many in our usual time. We'll reply with a date and price." : "Too many parts for an instant ready date. We'll plan it and reply with a date.");   // B163: labor-bound orders past maxLeadDays (extra molds don't help)
   }
   // Part weight: one short line on the page and in the email. Under 0.1 kg in grams.
   // c48: rotor weights are calculated too (nothing built yet), "per rotor" (research/pricing/rotor-weight-2026-10-16.md).
